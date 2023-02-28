@@ -1,2 +1,2 @@
 # SomeRandomThinking
-Some random thinking from my daily life
+Some random thinking from my rest time
