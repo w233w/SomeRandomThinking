@@ -26,7 +26,7 @@ class Rule:
         elif input_color == Color.BLACK:
             output_color = Color.WHITE
             output_direction = input_direction - 1
-        output_direction %= 3
+        output_direction %= 4
         output_color, output_direction = Color(output_color), Direction(output_direction)
         print(input_direction, output_direction)
         return output_color, output_direction
