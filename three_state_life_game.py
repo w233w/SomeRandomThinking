@@ -1,5 +1,5 @@
-# 仅限notebook使用
-# 以及可以玩了，不过参数还得调调
+# Currently only for ipynb
+# need to update the rule (under update()) to make is more meaningful
 from itertools import product
 from IPython.display import clear_output
 import random
@@ -7,7 +7,9 @@ import time
 
 
 class map_tile:
-    '''三状态的生命游戏,每个tile都是一个状态机
+    '''
+    三状态的生命游戏
+    Three state Conway life game
     '''
 
     def __init__(self, x, y, level=0) -> None:
@@ -19,37 +21,32 @@ class map_tile:
 
     def _visit_8_neighbor(self) -> int:
         counter = 0
+
         for del_x, del_y in product([-1, 0, 1], [-1, 0, 1]):
             loc = (self.x + del_x, self.y + del_y)
+            # Not counting self
             if del_x == del_y == 0:
                 continue
             if loc in map_obj:
                 counter += map_obj[loc].level >= 1
+
         return counter
 
     def update(self) -> None:
+        '''Game rules
+        '''
         n = self._visit_8_neighbor()
+
         if self.level == 0:
-            if n < 3:
+            if 1 < n <= 3:
                 self.temp_level = 1
-            elif n < 4:
-                self.temp_level = 2
         if self.level == 1:
-            if n < 3:
+            if 1 < n <= 2:
                 self.temp_level = 2
-            elif n > 4:
+            else:
                 self.temp_level = 0
         if self.level == 2:
-            if n > 4:
-                self.temp_level = 0
-            elif n > 3:
-                self.temp_level = 1
-
-        # 设置边界条件
-        if self.temp_level < 0:
-            self.temp_level = 0
-        if self.temp_level > 3:
-            self.temp_level = 3
+            self.temp_level = 1
 
     def next_state(self) -> None:
         self.level = self.temp_level
@@ -62,19 +59,19 @@ visual = {
 }
 
 if __name__ == '__main__':
-    range_low, range_high = -10, 10
-    game_round = 50
+    range_low, range_high = -10, 11
+    game_round = 100
 
     map_obj = {}
     for i in range(range_low, range_high):
         for j in range(range_low, range_high):
-            map_obj[(i, j)] = map_tile(i, j, random.choices([0, 1, 2], weights=(60, 20, 20))[0])
+            map_obj[(i, j)] = map_tile(i, j, random.choices([0, 1, 2], weights=(90, 5, 5))[0])
 
     for _ in range(game_round):
         for i in range(range_low, range_high):
             for j in range(range_low, range_high):
                 try:
-                    print(visual[map_obj[(i, j)].level], end='')
+                    print(visual[map_obj[(i, j)].level], end=' ')
                 except Exception:
                     print(visual[0], end='')
             print()
