@@ -1,0 +1,105 @@
+from enum import IntEnum
+from collections import defaultdict
+from IPython.display import clear_output
+import time
+
+
+class Color(IntEnum):
+    WHITE = 0
+    BLACK = 1
+
+
+class Direction(IntEnum):
+    UP = 0
+    RIGHT = 1
+    DOWN = 2
+    LEFT = 3
+
+
+class Rule:
+    def ant_rule(self, input_color, input_direction) -> (Color, Direction):
+        output_color, output_direction = 0, 0
+
+        if input_color == Color.WHITE:
+            output_color = Color.BLACK
+            output_direction = input_direction + 1
+        elif input_color == Color.BLACK:
+            output_color = Color.WHITE
+            output_direction = input_direction - 1
+        output_direction %= 3
+        output_color, output_direction = Color(output_color), Direction(output_direction)
+        print(input_direction, output_direction)
+        return output_color, output_direction
+
+    def move_rule(self, input_direction):
+        if input_direction == Direction.UP:
+            return 0, 1
+        elif input_direction == Direction.RIGHT:
+            return 1, 0
+        elif input_direction == Direction.DOWN:
+            return 0, -1
+        elif input_direction == Direction.LEFT:
+            return -1, 0
+        else:
+            raise ValueError('Unexpect direction')
+
+
+class ant:
+    def __init__(self, x=0, y=0, facing=Direction.LEFT) -> None:
+        self.x = x
+        self.y = y
+        self.loc = (x, y)
+        self.facing = facing
+        self.rule = Rule()
+
+    def __repr__(self):
+        return f'loc : {self.loc}, facing: {self.facing}'
+
+    def get_loc(self):
+        return self.loc
+
+    def update(self, tile_color) -> Color:
+        new_color, self.facing = self.rule.ant_rule(tile_color, self.facing)
+        return new_color
+
+    def next_state(self) -> None:
+        del_x, del_y = self.rule.move_rule(self.facing)
+        self.x += int(del_x)
+        self.y += int(del_y)
+        self.loc = (self.x, self.y)
+
+
+class grid:
+    def __init__(self):
+        self.ant = ant()
+        self.tiles = defaultdict(lambda: Color(0))
+        self.visual = {
+            -1: '\u0001',
+            0: '\u25a1',
+            1: '\u25a0',
+        }
+
+    def update(self) -> None:
+        ant_loc = self.ant.loc
+        new_color = self.ant.update(self.tiles[ant_loc])
+        self.tiles[ant_loc] = new_color
+        self.ant.next_state()
+
+    def draw(self, scale=10) -> None:
+        for i in range(-scale, scale+1):
+            for j in range(-scale, scale+1):
+                if (j, i) == self.ant.loc:
+                    print(self.visual[-1], end=' ')
+                else:
+                    print(self.visual[self.tiles[(j, i)]], end=' ')
+            print()
+
+
+g = grid()
+for _ in range(10):
+    g.update()
+    print(g.ant)
+    print(g.tiles[g.ant.loc])
+    g.draw()
+    time.sleep(0.5)
+    clear_output(wait=True)
