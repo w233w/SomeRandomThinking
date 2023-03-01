@@ -78,6 +78,7 @@ if __name__ == '__main__':
 
         for tile in map_obj:
             map_obj[tile].update()
+        for tile in map_obj:
             map_obj[tile].next_state()
 
         time.sleep(0.1)
