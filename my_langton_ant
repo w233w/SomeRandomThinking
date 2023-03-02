@@ -26,9 +26,12 @@ class Rule:
         elif input_color == Color.BLACK:
             output_color = Color.WHITE
             output_direction = input_direction - 1
+
         output_direction %= 4
-        output_color, output_direction = Color(output_color), Direction(output_direction)
+        output_color = Color(output_color)
+        output_direction = Direction(output_direction)
         print(input_direction, output_direction)
+
         return output_color, output_direction
 
     def move_rule(self, input_direction):
@@ -74,7 +77,7 @@ class grid:
         self.ant = ant()
         self.tiles = defaultdict(lambda: Color(0))
         self.visual = {
-            -1: '\u0001',
+            -1: '\u25cb',
             0: '\u25a1',
             1: '\u25a0',
         }
@@ -88,18 +91,19 @@ class grid:
     def draw(self, scale=10) -> None:
         for i in range(-scale, scale+1):
             for j in range(-scale, scale+1):
-                if (j, i) == self.ant.loc:
+                x, y = j, -i
+                if (x, y) == self.ant.loc:
                     print(self.visual[-1], end=' ')
                 else:
-                    print(self.visual[self.tiles[(j, i)]], end=' ')
+                    print(self.visual[self.tiles[(x, y)]], end=' ')
             print()
 
 
 g = grid()
-for _ in range(10):
+for _ in range(100):
     g.update()
     print(g.ant)
     print(g.tiles[g.ant.loc])
     g.draw()
-    time.sleep(0.5)
+    time.sleep(0.1)
     clear_output(wait=True)
