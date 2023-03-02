@@ -126,7 +126,7 @@ class grid:
         self._update()
 
     def do_animate(self, scale=10):
-        '''Do no use, currently not working on jupyter
+        '''Do not use, currently not working on jupyter
         '''
         self.fig = plt.figure()
         self.ax1 = self.fig.add_subplot(1, 1, 1)
