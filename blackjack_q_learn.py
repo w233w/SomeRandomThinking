@@ -5,11 +5,15 @@ from collections import defaultdict
 
 
 class BlackJackQLearn:
-    
+    '''
+    BlackJack reinforced learning using simplfied BlackJack. For more details:
+    https://github.com/openai/gym/blob/dcd185843a62953e27c2d54dc8c2d647d604b635/gym/envs/toy_text/blackjack.py#L50
+    '''
+
     def __init__(self):
         # BlackJack environment from OpenAI/gym.
         self.env = gym.make('Blackjack-v1', new_step_api=True)
-        
+
         # Used on Q_learning
         self.q_table = defaultdict(lambda: {0: 0.0, 1: 0.0})
 
@@ -18,14 +22,12 @@ class BlackJackQLearn:
 
         # Used to collect rewards
         self.rewards = defaultdict(lambda: {0: [0.0, 0], 1: [0.0, 0]})
-        
-        self.policy = None
 
+        self.policy = None
 
     # Global function to calculate the average of a list
     def _avg(self, lst):
         return sum(lst) / len(lst)
-
 
     def stream_avg(self, lst, new_val):
         if len(lst) != 2:
@@ -34,9 +36,7 @@ class BlackJackQLearn:
         new_count = count + 1
         return [(avg * count + new_val) / new_count, new_count]
 
-
     def _generate_an_episode(self):
-
         # Used to store an episode
         episode = []
 
@@ -58,7 +58,6 @@ class BlackJackQLearn:
             state = next_state
 
         return episode
-
 
     def _reversely_traversal_episode(self, episode):
         # Init the reward
@@ -86,7 +85,6 @@ class BlackJackQLearn:
             self.weights[state][good_choise] = 0.8
             self.weights[state][1 - good_choise] = 0.2
 
-
     def _monte_carlo(self, iters):
         for i in tqdm(range(iters)):
             # Generate episode
@@ -94,7 +92,6 @@ class BlackJackQLearn:
 
             self._reversely_traversal_episode(episode)
 
-    
     # gym.Env.BlackJackEnv only accept two input actions: 0 & 1 (False & True）
     # O represent stand and 1 represent hit.
     # Here we convert from {state: [0's reward, 1's reward]} to {state: 0 or 1} 
@@ -102,12 +99,10 @@ class BlackJackQLearn:
         act = lambda dic: max(dic, key=dic.get)
         self.policy = {key: act(val) for key, val in self.q_table.items()}
 
-
     def fit(self, iters=100000):
         self._monte_carlo(iters)
         self.build_model()
         return self.policy
-
 
     # TEST
     # A single round of game
@@ -123,7 +118,6 @@ class BlackJackQLearn:
 
         # Only collect initial state
         return init_state, reward
-
 
     def policy_check(self, iters):
         # Result
@@ -141,7 +135,6 @@ class BlackJackQLearn:
 
         return result_set
 
-
     # Used to summarize win/tie/loss rate from policy_check() by state.
     def over_all_rate(self, game_result):
         rate = {}
@@ -152,7 +145,6 @@ class BlackJackQLearn:
             rate[result_state] = [win_rate, tie_rate, loss_rate]
         return rate
 
-
     # Print win and loss rate.
     def win_loss_rate(self, game_result):
         rate = self.over_all_rate(game_result)
@@ -160,15 +152,14 @@ class BlackJackQLearn:
         # result[0] is where win_rate in each state.
         win_rate = self._avg([result[0] for result in rate.values()])
         loss_rate = self._avg([result[2] for result in rate.values()])
-        
-        return win_rate, lost_rate
 
+        return win_rate, loss_rate
 
-    def test(self, iters = 100000):
+    def test(self, iters=100000):
         # Check policy and get policy win/loss rate.
         overall_ratio = self.policy_check(iters)
         return self.win_loss_rate(overall_ratio)
-        
+
 
 if __name__ == '__main__':
     a = BlackJackQLearn()
