@@ -5,6 +5,10 @@ from IPython.display import clear_output
 
 
 def validation(func):
+    '''
+    A simple decorator used to handle invalid input()
+    Unless got valid input(), func will never stop.
+    '''
     def warpper(*args, **kwargs):
         while True:
             try:
@@ -15,6 +19,11 @@ def validation(func):
 
 
 class Game:
+    '''
+    Simple implementation of Escape of the Dead Minigame
+    Source: https://boardgamegeek.com/boardgame/87632/escape-dead-minigame
+    '''
+
     def __init__(self, diff=0):
         self.diff = diff
         self.lawn = 0
@@ -48,6 +57,7 @@ class Game:
 
     @validation
     def event_make_action(self):
+        print('input sth like \'a b c\' and make sure the sum is 4:')
         l, b, g = input().split(' ')
         l, b, g = int(l), int(b), int(g)
         if l + b + g == 4:
