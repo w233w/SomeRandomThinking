@@ -11,9 +11,6 @@ import numpy as np
 class Color(IntEnum):
     WHITE = 0
     BLACK = 1
-    
-    def total_Color(self):
-        return 2
 
     def visual(self):
         v = {
@@ -29,9 +26,6 @@ class Direction(IntEnum):
     DOWN = 2
     LEFT = 3
 
-    def total_Direction():
-        return 4
-
 
 class RL(IntEnum):
     R = 1
@@ -41,15 +35,15 @@ class RL(IntEnum):
 class Rule:
     def __init__(self, rule='RL'):
         self.rule = rule
-        if len(rule) != Color.total_Color():
+        if len(rule) != len(Color):
             raise ValueError('Rule does not match number of color!')
 
     def ant_rule(self, input_color, input_direction) -> (Color, Direction):
         output_direction = input_direction + RL[self.rule[input_color]]
         output_color = input_color + 1
 
-        output_color %= Color.total_Color()
-        output_direction %= Direction.total_Direction()
+        output_color %= len(Color)
+        output_direction %= len(Direction)
         output_color = Color(output_color)
         output_direction = Direction(output_direction)
 
