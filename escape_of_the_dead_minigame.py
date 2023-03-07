@@ -9,8 +9,8 @@ def validation(func):
         while True:
             try:
                 return func(*args, **kwargs)
-            except Exception:
-                print('Wrong input')
+            except Exception as e:
+                print(e)
     return warpper
 
 
@@ -41,27 +41,26 @@ class Game:
             self.zombies += 2
         elif 60 <= self.garage < 90:
             self.zombies += 3
-        elif 90 <= self.garage <= 100:
+        elif 90 <= self.garage < 100:
             self.zombies += 4
         else:
             raise ValueError('Impossible garage value.')
 
     @validation
     def event_make_action(self):
-        while True:
-            l, b, g = input().split(' ')
-            l, b, g = int(l), int(b), int(g)
-            if l + b + g == 4:
-                break
-            print('Total actions must be 4.')
-        self.action = [l, b, g]
+        l, b, g = input().split(' ')
+        l, b, g = int(l), int(b), int(g)
+        if l + b + g == 4:
+            self.action = [l, b, g]
+        else:
+            raise ValueError('Total actions must be 4.')
 
     def event_on_action(self):
         l, b, g = self.action
         for _ in range(l):
-            # roll a dice, if in [3,4,5,6] pass, else fail.
+            # roll a dice, if hit [3,4,5,6] then pass, else fail.
             # pass check will kill 1 zombie.
-            # if zombie die, gain 1 lawn.
+            # for every zombie killed, player gain 1 lawn.
             if random.choice(range(1, 7)) in range(3, 7):
                 if self.zombies >= 1:
                     self.lawn += 1
@@ -69,8 +68,8 @@ class Game:
         for _ in range(b):
             if random.choice(range(1, 7)) in range(3, 7):
                 self.barricade += 1
-                if self.barricade > 10:
-                    self.barricade = 10
+                if self.barricade > 10 - self.diff:
+                    self.barricade = 10 - self.diff
         for _ in range(g):
             if random.choice(range(1, 7)) in range(5, 7):
                 self.garage += 10
@@ -79,14 +78,19 @@ class Game:
         self.barricade -= self.zombies
 
     @validation
-    def event_make_reward_dision(self):
+    def event_make_reward_decision(self):
         if self.lawn < 10:
             return
         else:
             print('Enter 1 to get reward\nEnter 0 to skip.')
-            if input() == '1':
+            decision = input()
+            if decision == '1':
                 self.lawn = 0
                 self.do_reward()
+            elif decision == '0':
+                return
+            else:
+                raise ValueError('input must be 1 or 0')
 
     @validation
     def do_reward(self):
@@ -99,8 +103,10 @@ class Game:
             self.zombies_come = False
         elif option == '4':
             self.barricade += 3
-            if self.barricade > 10:
-                self.barricade = 10
+            if self.barricade > 10 - self.diff:
+                self.barricade = 10 - self.diff
+        else:
+            raise ValueError('input must be in the [1, 2, 3, 4]')
 
     def show_state(self):
         clear_output(wait=True)
@@ -113,7 +119,7 @@ class Game:
     def run(self):
         self.reset()
         while self.barricade > 0:
-            if self.garage > 100:
+            if self.garage >= 100:
                 return 'win'
             self.event_zombie_income()
             self.show_state()
@@ -122,11 +128,10 @@ class Game:
             self.show_state()
             self.event_zombies_attack()
             self.show_state()
-            self.event_make_reward_dision()
+            self.event_make_reward_decision()
             self.show_state()
         return 'lose'
 
 
 if __name__ == '__main__':
-    g = Game()
-    g.run()
+    Game().run()
