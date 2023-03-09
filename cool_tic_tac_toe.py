@@ -1,4 +1,3 @@
-# Unfinished!
 import time
 import numpy as np
 from IPython.display import clear_output
@@ -29,6 +28,17 @@ class ttt:
     例外：当下一回合落子的位置是被封锁的棋盘时，下一回合的落子不再有棋盘限制。
     被封锁的棋盘不允许再落子。
     胜利的条件是持有的棋盘达成3连的玩家获胜。
+    
+    io模式下操作：
+        每次输入两个数字，用空格隔开。数字从零开始数。
+        第一个数字表示从左往右数第几列
+        第二个数字表示从上往下数第几行
+        normal play时，会提示落子的棋盘，数字逻辑同上。输入的数字均需处于[0-2]，例如'1 2'
+        free play时，可以在任意空白处落子。输入的数字均需处于[0-8]，例如'6 7'
+        输入无效时会提示，在得到有效输入前游戏不会继续。
+        
+    TODO:
+        free play和normal play的逻辑有重构的空间
     '''
 
     def __init__(self):
@@ -48,13 +58,15 @@ class ttt:
                 print()
 
     def check_winner(self, board):
-        """checks for a winner
-        *  returns
-          'X' for X wins
-          *  'O' for O wins
-          *  ' '  for no winner yet
-          * 0 for draw
-        """
+        '''
+        checks for a winner
+        1 for player 1 win
+        2 for player 2 win
+        0 for no winner yet
+        -1 for tie
+        '''
+        board = board.flatten().tolist()
+
         # first row check
         for i in range(0, 9, 3):
             if board[i:i + 3] == [1] * 3 or board[i:i + 3] == [2] * 3:
@@ -65,7 +77,7 @@ class ttt:
             if board[i::3] == [1] * 3 or board[i::3] == [2] * 3:
                 return board[i]
 
-        # now test         down slope
+        # now test down slope
         if board[0::4] == [1] * 3 or board[0::4] == [2] * 3:
             return board[0]
 
@@ -82,13 +94,30 @@ class ttt:
 
     @validation
     def normal_play(self, team):
+        # 获取当前棋盘落子的位置
         x, y = input().split(' ')
         x, y = int(x), int(y)
         if x < 0 or x > 2 or y < 0 or y > 2:
             raise ValueError('x, y must be [0-2]')
-        del_x, del_y = self.on_board * 3
+
+        # 获取落子棋盘的位置
+        board_x, board_y = self.on_board
+        del_x, del_y = 3 * board_x, 3 * board_y
+
+        # 落子
         if self.board[x+del_x][y+del_y] == 0:
+            # 在目标位置落子
             self.board[x+del_x][y+del_y] = team
+            # 落子后判断胜负
+            res = self.check_winner(self.board[del_x:del_x+3, del_y:del_y+3])
+            # 如果平局则最后落子者赢下棋盘
+            if res == -1:
+                res = team
+            elif res > 0:
+                # 更新棋盘信息
+                self.larger_board[board_x][board_y] = res
+                self.board[del_x:del_x+3, del_y:del_y+3] = res
+            # 判断下一回合棋盘是否被封锁
             if self.larger_board[x][y] != 0:
                 self.free_play_chance = True
             else:
@@ -104,10 +133,16 @@ class ttt:
             raise ValueError('x, y must be [0-8]')
         if self.board[x][y] == 0:
             self.board[x][y] = team
+            res = self.check_winner(self.board[x//3*3:x//3*3+3, y//3*3:y//3*3+3])
+            if res == -1:
+                res = team
+            elif res > 0:
+                self.larger_board[x//3][y//3] = res
+                self.board[x//3*3:x//3*3+3, y//3*3:y//3*3+3] = res
             if self.larger_board[x//3][y//3] != 0:
                 self.free_play_chance = True
             else:
-                self.on_board = np.array([x//3, y//3])
+                self.on_board = np.array([x-x//3*3, y-y//3*3])
         else:
             raise ValueError('This place has already been played')
 
@@ -118,11 +153,16 @@ class ttt:
             self.show()
             time.sleep(1)
             if self.free_play_chance:
+                print('Free play')
                 self.free_play(player)
             else:
+                print('Normal play on', self.on_board)
                 self.normal_play(player)
+            if self.check_winner(self.larger_board) != 0:
+                return self.check_winner(self.larger_board)
+            # 切换玩家
             player = 3 - player
 
 
-t = ttt()
-t.check_winner(np.array([[0, 2, 1], [1, 2, 1], [2, 1, 0]]).flatten().tolist())
+if __name__ == '__main__':
+    ttt().run()
