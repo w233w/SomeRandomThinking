@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tic Tac Toe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Tic Tac Toe</h1>
+	<canvas id="board" width="300" height="300"></canvas>
+    <script>
+		const canvas = document.getElementById("board");
+		const context = canvas.getContext("2d");
+
+		// 绘制井字棋格子
+		context.beginPath();
+		context.moveTo(100, 0);
+		context.lineTo(100, 300);
+		context.moveTo(200, 0);
+		context.lineTo(200, 300);
+		context.moveTo(0, 100);
+		context.lineTo(300, 100);
+		context.moveTo(0, 200);
+		context.lineTo(300, 200);
+		context.strokeStyle = "black";
+		context.stroke();
+
+		let board = [[null, null, null], [null, null, null], [null, null, null]];
+		let currentPlayer = "X";
+
+		// 处理鼠标点击事件
+		function handleMouseClick(event) {
+		  const x = event.clientX - canvas.offsetLeft;
+		  const y = event.clientY - canvas.offsetTop;
+		  const row = Math.floor(y / 100);
+		  const col = Math.floor(x / 100);
+
+		  if (board[row][col] === null) {
+			board[row][col] = currentPlayer;
+			drawMove(row, col, currentPlayer);
+
+			if (checkForWin()) {
+			  alert(currentPlayer + " wins!");
+			  reset();
+			} else if (checkForTie()) {
+			  alert("It's a tie!");
+			  reset();
+			} else {
+			  currentPlayer = currentPlayer === "X" ? "O" : "X";
+			}
+		  }
+		}
+
+		// 绘制棋子
+		function drawMove(row, col, player) {
+		  context.font = "80px Arial";
+		  context.textAlign = "center";
+		  context.textBaseline = "middle";
+		  context.fillText(player, col * 100 + 50, row * 100 + 50);
+		}
+
+		// 检查是否获胜
+		function checkForWin() {
+		  for (let i = 0; i < 3; i++) {
+			if (
+			  board[i][0] === currentPlayer &&
+			  board[i][1] === currentPlayer &&
+			  board[i][2] === currentPlayer
+			) {
+			  return true;
+			}
+
+			if (
+			  board[0][i] === currentPlayer &&
+			  board[1][i] === currentPlayer &&
+			  board[2][i] === currentPlayer
+			) {
+			  return true;
+			}
+		  }
+
+		  if (
+			board[0][0] === currentPlayer &&
+			board[1][1] === currentPlayer &&
+			board[2][2] === currentPlayer
+		  ) {
+			return true;
+		  }
+
+		  if (
+			board[0][2] === currentPlayer &&
+			board[1][1] === currentPlayer &&
+			board[2][0] === currentPlayer
+		  ) {
+			return true;
+		  }
+
+		  return false;
+		}
+
+		// 检查是否平局
+		function checkForTie() {
+		  for (let row = 0; row < 3; row++) {
+			for (let col = 0; col < 3; col++) {
+			  if (board[row][col] === null) {
+				return false;
+			  }
+			}
+		  }
+		  return true;
+		}
+
+		// 重置游戏状态
+		function reset() {
+		  board = [[null, null, null], [null, null, null], [null, null, null]];
+		  currentPlayer = "X";
+		  context.clearRect(0, 0, canvas.width, canvas.height);
+		  context.beginPath();
+		  context.moveTo(100, 0);
+		  context.lineTo(100, 300);
+		  context.moveTo(200, 0);
+		  context.lineTo(200, 300);
+		  context.moveTo(0, 100);
+		  context.lineTo(300, 100);
+		  context.moveTo(0, 200);
+		  context.lineTo(300, 200);
+		  context.strokeStyle = "black";
+		  context.stroke();
+		}
+
+		canvas.addEventListener("mousedown", handleMouseClick);
+
+	</script>
+</body>
+</html>

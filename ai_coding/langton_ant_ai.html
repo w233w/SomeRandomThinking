@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Langton Ant</title>
+</head>
+<body>
+    <canvas id="canvas" width="500" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const ANT_SIZE = 5;
+        const GRID_SIZE = 100;
+
+        let grid = new Array(GRID_SIZE);
+        for (let i = 0; i < GRID_SIZE; i++) {
+            grid[i] = new Array(GRID_SIZE).fill(0);
+        }
+
+        let ant = {
+            x: Math.floor(GRID_SIZE / 2),
+            y: Math.floor(GRID_SIZE / 2),
+            direction: 'up'
+        };
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let cellSize = canvas.width / GRID_SIZE;
+
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    if (grid[i][j] === 1) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+                    } else {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(ant.x * cellSize + ANT_SIZE, ant.y * cellSize + ANT_SIZE);
+            switch (ant.direction) {
+                case 'up':
+                    ant.y--;
+                    break;
+                case 'down':
+                    ant.y++;
+                    break;
+                case 'left':
+                    ant.x--;
+                    break;
+                case 'right':
+                    ant.x++;
+                    break;
+            }
+            if (grid[ant.x][ant.y] === 1) {
+                ant.direction = turnRight(ant.direction);
+                grid[ant.x][ant.y] = 0;
+            } else {
+                ant.direction = turnLeft(ant.direction);
+                grid[ant.x][ant.y] = 1;
+            }
+            ctx.lineTo(ant.x * cellSize + ANT_SIZE, ant.y * cellSize + ANT_SIZE);
+            ctx.stroke();
+
+            requestAnimationFrame(drawGrid);
+        }
+
+        function turnRight(direction) {
+            switch (direction) {
+                case 'up':
+                    return 'right';
+                case 'down':
+                    return 'left';
+                case 'left':
+                    return 'up';
+                case 'right':
+                    return 'down';
+            }
+        }
+
+        function turnLeft(direction) {
+            switch (direction) {
+                case 'up':
+                    return 'left';
+                case 'down':
+                    return 'right';
+                case 'left':
+                    return 'down';
+                case 'right':
+                    return 'up';
+            }
+        }
+
+        drawGrid();
+    </script>
+</body>
+</html>
