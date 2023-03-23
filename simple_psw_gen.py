@@ -13,5 +13,7 @@ def simple_psw_gen(seed: [str, int]) -> str:
 
 if __name__ == '__main__':
     seed = sys.argv
-    print(seed)
+    if len(seed) != 2:
+        print('Need exactly one parameter!')
+        exit(0)
     print(simple_psw_gen(seed))
