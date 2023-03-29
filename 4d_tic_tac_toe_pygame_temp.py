@@ -1,5 +1,12 @@
 '''
 Unfinished
+TODO:
+    1. Game logic to force player play on specific board
+       or anyplace if on special case
+    2. Visual effect to let player know where they can play next
+    3. Simple UI let player click start game buttom to start
+    4. Simple UI let player click info buttom to read the game rule
+    5. Simple UI let player can see who will play next
 '''
 import pygame
 from pygame import Vector2
@@ -55,8 +62,8 @@ class ChessBoardUnit(pygame.sprite.Sprite):
         self.active = True
         self.image_collection = {
             0: pygame.image.load("none.png"),  # change to empty
-            1: pygame.image.load("circle.png"),  # change to X
-            2: pygame.image.load("cross.png"),  # change to O
+            1: pygame.image.load("circle.png"),  # change to O
+            2: pygame.image.load("cross.png"),  # change to X
         }
         self.image = self.image_collection[self.status]
         image_size = self.image.get_size()[0]
@@ -67,8 +74,11 @@ class ChessBoardUnit(pygame.sprite.Sprite):
         if not self.active:
             return
         if utils.check_mouse_in_spirte(self.pos, self.image.get_size()[0]):
-            if pygame.mouse.get_pressed()[0] == 1:
-                self.status = 1
+            if pygame.mouse.get_pressed()[0] == 1 and self.parent.parent.playable:
+                self.parent.parent.playable = False
+                self.parent.parent.current_player = 3 - self.parent.parent.current_player
+                self.status = self.parent.parent.current_player
+                self.parent.unit_status[int(self.abs_pos.x)][int(self.abs_pos.y)] = self.status
         self.active = self.status == 0
         self.image = self.image_collection[self.status]
 
@@ -83,8 +93,9 @@ class ChessBoard(pygame.sprite.Sprite):
         self.active = True
         self.image_collection = {
             0: pygame.image.load("board.png"),  # change to 3*3 grid
-            1: pygame.image.load("board.png"),  # change to BIG X
-            2: pygame.image.load("board.png"),  # change to BIG O
+            1: pygame.image.load("big-circle.png"),  # change to BIG O
+            2: pygame.image.load("big-cross.png"),  # change to BIG X
+            -1: pygame.image.load("gray.png")
         }
         self.image = self.image_collection[self.status]
         image_size = self.image.get_size()[0]
@@ -100,17 +111,23 @@ class ChessBoard(pygame.sprite.Sprite):
             return
         self.units.update()
         self.units.draw(screen)
+        winner = utils.check_winner(self.unit_status)
+        self.status = winner
+        self.parent.unit_status[int(self.abs_pos.x)][int(self.abs_pos.y)] = winner
         self.active = self.status == 0
         self.image = self.image_collection[self.status]
 
 
 class LargeChessBoard(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, pos):
         super().__init__()
-        self.pos = Vector2(200, 200) + Vector2(20, 20)
+        self.pos = pos
         self.unit_status = np.zeros((3, 3), dtype=np.int32)
         self.image = pygame.image.load("bomb.png")
         self.rect = self.image.get_rect(center=self.pos)
+        self.game_play = True  # 有开始界面了之后改成False
+        self.current_player = 1
+        self.playable = True
         self.units = pygame.sprite.Group()
         for i in range(3):
             for j in range(3):
@@ -118,7 +135,15 @@ class LargeChessBoard(pygame.sprite.Sprite):
         self.winner = -1
 
     def update(self):
+        if not self.game_play:
+            return
         self.units.update()
+        if pygame.mouse.get_pressed()[0] == 0 and not self.playable:
+            self.playable = True
+        winner = utils.check_winner(self.unit_status)
+        if winner != 0:
+            print('winner is ', winner)
+            self.game_play = False
         self.units.draw(screen)
 
 
@@ -135,9 +160,10 @@ if __name__ == '__main__':
     screen = pygame.display.set_mode(SIZE)
     clock = pygame.time.Clock()
 
-    gameboard = LargeChessBoard()
-    gg = pygame.sprite.Group()
-    gg.add(gameboard)
+    gameboard = LargeChessBoard(Vector2(WIDTH/2, HEIGHT/2))
+    #gg = pygame.sprite.Group()
+    #gg.add(gameboard)
+    gamming = False
     running = True
     while running:
         clock.tick(FPS)
@@ -147,7 +173,7 @@ if __name__ == '__main__':
             if event.type == pygame.QUIT:
                 running = False
         # Game loop
-        gg.update()
+        gameboard.update()
         # gg.draw(screen)
         pygame.display.flip()
     pygame.quit()
