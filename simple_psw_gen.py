@@ -12,8 +12,15 @@ def simple_psw_gen(seed: [str, int]) -> str:
     return b64[:-2].decode()
 
 if __name__ == '__main__':
-    seed = sys.argv
-    if len(seed) != 2:
+    args = sys.argv
+    if len(args) > 2:
         print('Need exactly one parameter!')
         exit(0)
+    elif len(args) == 1:
+        wait = True
+        seed = input("Enter the seed: ")
+    else:
+        seed = args[1]
     print(simple_psw_gen(seed))
+    if wait:
+        input("Press Enter to exit...")
