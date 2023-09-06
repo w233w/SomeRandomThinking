@@ -1,7 +1,8 @@
 import pygame
-from itertools import product
+import numpy as np
+from copy import deepcopy
 
-# 网格吸附
+# 网格吸附demo1
 
 # 各类参数
 # 窗口大小
@@ -24,16 +25,15 @@ Green = 0, 255, 0
 Yellow = 255, 255, 0
 
 
+# template for a '+' shape:      template for a 'L' shape：
+# [0, 0, 1, 0, 0]                [0, 1, 0]
+# [0, 0, 1, 0, 0]                [0, 1, 0]
+# [1, 1, 1, 1, 1]                [0, 1, 1]
+# [0, 0, 1, 0, 0]
+# [0, 0, 1, 0, 0]
+# shape must be square, rotate will base on center of the shape
 class Board(pygame.sprite.Sprite):
-    # template for a '+' shape:      template for a 'L' shape：
-    # [' ', ' ', 'o', ' ', ' ']      [' ', 'o', ' ']
-    # [' ', ' ', 'o', ' ', ' ']      [' ', 'o', ' ']
-    # ['o', 'o', 'o', 'o', 'o']      [' ', 'o', 'o']
-    # [' ', ' ', 'o', ' ', ' ']
-    # [' ', ' ', 'o', ' ', ' ']
-    # o is where normal bead located, x is where the bead magnitude with mouse
-    # shape dosen't matter, rotate will base on center of the shape
-    def __init__(self, template: list[list[str]], pos) -> None:
+    def __init__(self, template: list[list[int]], pos) -> None:
         super().__init__()
         if len(template) != len(template[0]):
             raise ValueError("Shape must be square")
@@ -42,22 +42,19 @@ class Board(pygame.sprite.Sprite):
         image_size = shape_size * INTERVAL
         self.image = pygame.Surface(pygame.Vector2(image_size, image_size))
         self.image.set_colorkey(Black)
-        self.init_pos = pygame.Vector2(200, 500)
-        self.pos = pygame.Vector2(200, 500)
+        self.init_pos = pos
+        self.pos = pos
         self.rect = self.image.get_rect(center=self.pos)
-        self.container = {}
+        self.container = np.array(template)
         for i in range(len(template)):
             for j in range(len(template[0])):
-                if template[i][j] == " ":
-                    self.container[(i, j)] = 0
-                elif template[i][j] == "o":
+                if template[i][j] == 1:
                     pygame.draw.circle(
                         self.image,
                         Green,
                         pygame.Vector2(INTERVAL * (0.5 + j), INTERVAL * (0.5 + i)),
                         BEAD_RADIUS,
                     )
-                    self.container[(i, j)] = 1
 
     def set_pos(self, pos: pygame.Vector2):
         self.pos = pos
@@ -71,8 +68,6 @@ class Board(pygame.sprite.Sprite):
             self.add(on_drag)
         if on_drag in self.groups():
             self.set_pos(mouse_pos)
-        if pygame.mouse.get_pressed(3)[0] and pygame.mouse.get_pressed(3)[2]:
-            self.rotate()
 
 
 class Grid(pygame.sprite.Sprite):
@@ -98,10 +93,7 @@ class Grid(pygame.sprite.Sprite):
                 (size, i * self.grid_size),
                 5,
             )
-        self.container = {}
-        for i, j in product(range(edges), range(edges)):
-            self.container[(i, j)] = 0
-        print(self.container)
+        self.container = np.zeros((edges, edges), dtype=np.int16)
 
     def update(self, mouse_pos):
         if (
@@ -110,13 +102,19 @@ class Grid(pygame.sprite.Sprite):
             and self.rect.collidepoint(mouse_pos)
         ):
             delta_pos = mouse_pos - pygame.Vector2(50, 50)
-            x = delta_pos.x // self.grid_size
-            y = delta_pos.y // self.grid_size
-            new_pos = pygame.Vector2(
-                50 + (0.5 + x) * self.grid_size, 50 + (0.5 + y) * self.grid_size
-            )
-            on_drag.sprite.set_pos(new_pos)
-            on_drag.empty()
+            x = int(delta_pos.x // self.grid_size)
+            y = int(delta_pos.y // self.grid_size)
+
+            if self.add(on_drag.sprite.container, self.container, y, x):
+                new_pos = pygame.Vector2(
+                    50 + (0.5 + x) * self.grid_size, 50 + (0.5 + y) * self.grid_size
+                )
+                on_drag.sprite.set_pos(new_pos)
+                on_drag.sprite.image.set_alpha(50)
+                on_drag.empty()
+            else:
+                on_drag.sprite.set_pos(on_drag.sprite.init_pos)
+                on_drag.empty()
         elif (
             on_drag.sprite is not None
             and not pygame.mouse.get_pressed(3)[0]
@@ -125,13 +123,55 @@ class Grid(pygame.sprite.Sprite):
             on_drag.sprite.set_pos(on_drag.sprite.init_pos)
             on_drag.empty()
 
-    def can_magenitude(self, board: Board) -> bool:
-        semi_radius = board.semi_radius
-        target_center = pygame.Vector2(semi_radius, semi_radius)
-        target_container: dict[tuple[int, int], int] = on_drag.sprite.container
-        for k, v in target_container.items():
-            pass
-        return False
+    def isRectContain(self, rect1, rect2):
+        rect1_x, rect1_y, rect1_height, rect1_width = rect1
+        rect2_x, rect2_y, rect2_height, rect2_width = rect2
+        return (
+            rect1_y >= rect2_y
+            and rect1_y + rect1_width <= rect2_y + rect2_width
+            and rect1_x >= rect2_x
+            and rect1_x + rect1_height <= rect2_x + rect2_height
+        )
+
+    def add(
+        self, small: np.ndarray, giant: np.ndarray, target_row: int, target_col: int
+    ):
+        m_small = np.array(small)
+        m_big = np.array(giant)
+        m_small_shape = m_small.shape
+        m_small_radius = m_small_shape[0] // 2
+        m_small_up, m_small_down, m_small_left, m_small_right = 0, 0, 0, 0
+        for i in range(m_small_radius):
+            x = m_small_radius - (i + 1)
+            if 1 in m_small[x]:
+                m_small_up = i + 1
+            if 1 in m_small[-x - 1]:
+                m_small_down = i + 1
+            if 1 in m_small[:, x]:
+                m_small_left = i + 1
+            if 1 in m_small[:, -x - 1]:
+                m_small_right = i + 1
+        small_rect = (
+            target_row - m_small_up,
+            target_col - m_small_left,
+            m_small_up + m_small_down + 1,
+            m_small_left + m_small_right + 1,
+        )
+        big_rect = 0, 0, self.edges, self.edges
+        if not self.isRectContain(small_rect, big_rect):
+            return False
+        s = m_small[
+            m_small_radius - m_small_up : m_small_radius + 1 + m_small_down,
+            m_small_radius - m_small_left : m_small_radius + 1 + m_small_right,
+        ]
+        m_big[
+            small_rect[0] : small_rect[0] + small_rect[2],
+            small_rect[1] : small_rect[1] + small_rect[3],
+        ] += s
+        print(m_big)
+        if 2 in m_big:
+            return False
+        return True
 
 
 # Init pygame & Crate screen
@@ -151,9 +191,15 @@ test = pygame.sprite.Group(Grid(300, 6))
 
 on_drag = pygame.sprite.GroupSingle()
 
-template = [[" ", "o", " "], [" ", "o", " "], [" ", "o", "o"]]
+template = [
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 1, 1],
+    [0, 0, 0, 0, 0],
+]
 
-board = pygame.sprite.Group(Board(template, None))
+board = pygame.sprite.Group(Board(template, pygame.Vector2(200, 500)))
 
 # 主体
 while running := True:
