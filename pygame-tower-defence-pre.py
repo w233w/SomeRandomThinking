@@ -15,6 +15,7 @@ GRIDS_SIZE = 240
 EDGES = 5
 if EDGES not in [4, 5, 6]:
     raise ValueError("Size can only be 4, 5, or 6.")
+HAVE_CORNOR = True
 INTERVAL = GRIDS_SIZE // EDGES
 TOWER_GRID_SIZE = 40
 ENEMY_SIZE = 40
@@ -117,7 +118,7 @@ class TestTower(BaseTower):
         mouse_pos = pygame.Vector2(pygame.mouse.get_pos())
         if pygame.time.get_ticks() - self.last_text > 200:
             if self.placed:
-                player_bullets.add(SmallBullet(self.pos, pygame.Vector2(13, 0)))
+                player_bullets.add(SmallBullet(self.pos, pygame.Vector2(8, 0)))
             self.last_text = pygame.time.get_ticks()
         for event in event_list:
             if not self.placed:
@@ -189,8 +190,10 @@ class Grids(pygame.sprite.Sprite):
         self.interval = pygame.Vector2(INTERVAL)
         self.top_left_pos = (VSIZE - pygame.Vector2(size)) / 2
         self.rect = self.image.get_rect(center=pygame.Vector2(SIZE) / 2)
-        # for e in range(1, edges):
         for e in range(0, edges + 1):
+            if not HAVE_CORNOR:
+                if e == 0 or e == edges:
+                    continue
             pygame.draw.line(
                 self.image,
                 Line,
@@ -207,13 +210,14 @@ class Grids(pygame.sprite.Sprite):
             )
         for i in range(edges**2):
             x, y = i // edges, i % edges
-            # if (x, y) in [
-            #     (0, 0),
-            #     (0, edges - 1),
-            #     (edges - 1, 0),
-            #     (edges - 1, edges - 1),
-            # ]:
-            #     continue
+            if not HAVE_CORNOR:
+                if (x, y) in [
+                    (0, 0),
+                    (0, edges - 1),
+                    (edges - 1, 0),
+                    (edges - 1, edges - 1),
+                ]:
+                    continue
             coordinate = (x, y)
             pos = self.top_left_pos + pygame.Vector2(
                 INTERVAL * (0.5 + y), INTERVAL * (0.5 + x)
