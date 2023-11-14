@@ -46,13 +46,13 @@ class UI:
 
         # 状态栏
         self.status = tk.StringVar()
-        print(123)
         self.status.set(" ...")
         self.statusbar = tk.Label(
             self.root, textvariable=self.status, bd=1, relief=tk.SUNKEN, anchor=tk.W
         )
         self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
 
+        # 各个Tab
         self.main_frame = tk.Frame(self.tabview)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self.tabview.add(self.main_frame, text="Main")
@@ -75,20 +75,21 @@ class UI:
 
         self.skill_frame = tk.Frame(self.tabview)
         self.skill_frame.pack(fill=tk.BOTH, expand=True)
-        self.tabview.add(self.skill_frame, text="Shop")
+        self.tabview.add(self.skill_frame, text="Skill")
 
         self.challenge_frame = tk.Frame(self.tabview)
         self.challenge_frame.pack(fill=tk.BOTH, expand=True)
-        self.tabview.add(self.challenge_frame, text="Shop")
+        self.tabview.add(self.challenge_frame, text="Challenge")
 
         self.archivement_frame = tk.Frame(self.tabview)
         self.archivement_frame.pack(fill=tk.BOTH, expand=True)
-        self.tabview.add(self.archivement_frame, text="Shop")
+        self.tabview.add(self.archivement_frame, text="Archivement")
 
         self.setting_frame = tk.Frame(self.tabview)
         self.setting_frame.pack(fill=tk.BOTH, expand=True)
-        self.tabview.add(self.setting_frame, text="Shop")
+        self.tabview.add(self.setting_frame, text="Setting")
 
+        # 绘制各个Tab
         self.main_page()
         self.map_page()
         self.ritual_page()
@@ -108,7 +109,6 @@ class UI:
         self.name_tag = tk.Label(self.Upper, text="探员:", bd=1, relief="ridge")
         self.name_tag.place(relheight=0.5, relwidth=1 / 6, relx=0, rely=0)
         self.name = tk.StringVar()
-        self.name.set(self.values.name)
         self.name_label = tk.Label(
             self.Upper, textvariable=self.name, bd=1, relief="ridge"
         )
@@ -118,7 +118,6 @@ class UI:
         self.rank_tag = tk.Label(self.Upper, text="等阶:", bd=1, relief="ridge")
         self.rank_tag.place(relheight=0.5, relwidth=1 / 6, relx=0.5, rely=0)
         self.rank = tk.StringVar()
-        self.rank.set(self.values.rank)
         self.rank_label = tk.Label(
             self.Upper, textvariable=self.rank, bd=1, relief="ridge"
         )
@@ -128,7 +127,6 @@ class UI:
         self.insight_tag = tk.Label(self.Upper, text="灵视:", bd=1, relief="ridge")
         self.insight_tag.place(relheight=0.5, relwidth=1 / 6, relx=0, rely=0.5)
         self.insight = tk.StringVar()
-        self.insight.set(self.values.insight)
         self.insight_label = tk.Label(
             self.Upper, textvariable=self.insight, bd=1, relief="ridge"
         )
@@ -138,7 +136,6 @@ class UI:
         self.sans_tag = tk.Label(self.Upper, text="理智:", bd=1, relief="ridge")
         self.sans_tag.place(relheight=0.5, relwidth=1 / 6, relx=1 / 3, rely=0.5)
         self.sans = tk.StringVar()
-        self.sans.set(self.values.sans)
         self.sans_label = tk.Label(
             self.Upper, textvariable=self.sans, bd=1, relief="ridge"
         )
@@ -148,7 +145,6 @@ class UI:
         self.twist_rate_tag = tk.Label(self.Upper, text="扭曲度:", bd=0.5, relief="ridge")
         self.twist_rate_tag.place(relheight=0.5, relwidth=1 / 6, relx=2 / 3, rely=0.5)
         self.twist_rate = tk.StringVar()
-        self.twist_rate.set(str(self.values.twist_rate) + "%")
         self.twist_rate_label = tk.Label(
             self.Upper, textvariable=self.twist_rate, bd=1, relief="ridge"
         )
@@ -215,10 +211,11 @@ class UI:
         self.update_main()
 
     def update_main(self):
+        self.name.set(self.values.name)
         self.rank.set(self.values.rank)
         self.insight.set(self.values.insight)
         self.sans.set(self.values.sans)
-        self.twist_rate.set(self.values.twist_rate)
+        self.twist_rate.set(str(self.values.twist_rate) + "%")
         self.root.after(100, self.update_main)
 
     # 选择地图后直接开始行动，触发事件会提示，30秒不理会则跳过
@@ -315,11 +312,19 @@ class UI:
         )
         self.back_buttom.pack(side="bottom")
 
+        self.t1flag = True
         self.t1 = tk.Label(self.setting_frame, bg="red")
         self.t1.pack(fill="both", expand=1)
         self.t2 = tk.Label(self.setting_frame, bg="green", text="hover")
         self.t2.pack(fill="both", expand=1)
-        self.t2.bind("<Enter>", lambda e: self.t1.config(bg="blue"))
+        self.t2.bind("<Enter>", self.foo)
+
+    def foo(self, event):
+        if self.t1flag:
+            self.t1.config(bg="blue")
+        else:
+            self.t1.config(bg="cyan")
+        self.t1flag = not self.t1flag
 
     def run(self):
         self.root.mainloop()
