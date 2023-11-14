@@ -23,15 +23,16 @@ class GUI:
         self.garage_svar = StringVar(value=self.garage)
         self.delta_garage = 0
 
-        self.zombies = 0
+        self.zombies = 1
         self.zombies_svar = StringVar(value=self.zombies)
-        self.delta_zombies = 0
+        self.new_zombies = 0
+        self.kill_zombies = 0
 
         # Helper parameter
         self.zombies_come = True
 
         # info parameter
-        self.info = StringVar(value="信息栏")
+        self.info = StringVar(value="信息栏\n")
 
         # menu
         self.menubar = Menu(self.root)
@@ -91,24 +92,14 @@ class GUI:
 
         self.SFB_info_frame = Frame(self.root)
         self.SFB_info_frame.pack(fill=BOTH, expand=True)
-        self.S_info = Label(
-            self.SFB_info_frame, text="D6>3 => Z-1\nZ-1 => L+1", font=("微软雅黑", 8)
+        self.SFB_info_label = Label(
+            self.SFB_info_frame, text="4个D6行动点, 攻击>2生效\n修理>3生效,逃离>4生效"
         )
-        self.S_info.place(
-            relx=1 / 6, rely=0.5, relheight=1, relwidth=1 / 3, anchor=CENTER
-        )
-        self.F_info = Label(self.SFB_info_frame, text="D6>3 => H+1", font=("微软雅黑", 8))
-        self.F_info.place(
-            relx=3 / 6, rely=0.5, relheight=1, relwidth=1 / 3, anchor=CENTER
-        )
-        self.B_info = Label(self.SFB_info_frame, text="D6>4 => P+1", font=("微软雅黑", 8))
-        self.B_info.place(
-            relx=5 / 6, rely=0.5, relheight=1, relwidth=1 / 3, anchor=CENTER
-        )
+        self.SFB_info_label.pack(fill=BOTH, expand=True)
 
         self.SFB_frame = Frame(self.root)
         self.SFB_frame.pack(fill=BOTH, expand=True)
-        self.S_label = Label(self.SFB_frame, text="开枪")
+        self.S_label = Label(self.SFB_frame, text="攻击")
         self.S_label.place(
             relx=1 / 12, rely=0.5, relheight=1, relwidth=1 / 6, anchor=CENTER
         )
@@ -139,16 +130,16 @@ class GUI:
         self.A_button.place(relx=0.5, rely=0.5, relheight=0.9, anchor=CENTER)
 
         self.I_frame = Frame(self.root)
-        self.I_frame.pack(fill=BOTH, expand=True)
+        self.I_frame.pack(fill=X, expand=True)
         self.I_label = Label(self.I_frame, textvariable=self.info, anchor=CENTER)
-        self.I_label.pack(fill=BOTH, expand=True)
+        self.I_label.pack(fill=X, expand=True)
 
     def reset(self):
         self.lawn = 0
         self.barricade = 10
         self.garage = 10
         self.zombies = 0
-        self.info.set("")
+        self.info.set("信息栏\n\n")
         self.refresh_label()
 
     def refresh_label(self):
@@ -157,12 +148,26 @@ class GUI:
         self.garage_svar.set(self.garage)
         self.zombies_svar.set(self.zombies)
 
+    def fix_barricade(self, v: int):
+        if self.barricade + v <= 10:
+            self.barricade += v
+            self.delta_barricade += v
+        else:
+            self.delta_barricade += 10 - self.barricade
+            self.barricade = 10
+
+    def progress(self):
+        self.garage += 10
+        self.delta_garage += 10
+
+    def use_lawn(self):
+        self.lawn -= 10
+        self.delta_lawn += 10
+
     def event_on_action(self):
         s = int(self.S_entry.get())
         f = int(self.F_entry.get())
         b = int(self.B_entry.get())
-
-        print(s, f, b)
 
         if s + f + b != 4:
             raise ValueError("Sum must be 4!")
@@ -176,48 +181,100 @@ class GUI:
                     self.lawn += 1
                     self.delta_lawn += 1
                     self.zombies -= 1
-                    self.delta_zombies -= 1
+                    self.kill_zombies += 1
         for _ in range(f):
             if random.choice(range(1, 7)) in range(3, 7):
-                self.barricade += 1
-                self.delta_barricade += 1
-                if self.barricade > 10:
-                    self.barricade -= 1
-                    self.delta_barricade -= 1
+                self.fix_barricade(1)
         for _ in range(b):
             if random.choice(range(1, 7)) in range(5, 7):
-                self.garage += 10
-                self.delta_garage += 10
+                self.progress()
 
     def event_zombies_attack(self):
         self.barricade -= self.zombies
         self.delta_barricade -= self.zombies
 
+    def event_make_reward_decision(self):
+        if self.lawn >= 10:
+            reward = Toplevel(self.root)
+            reward.geometry("200x200")
+
+            Label(reward, text="选择以下一种效果").pack(fill=BOTH, expand=True)
+            Button(
+                reward,
+                text="敌人归零",
+                command=lambda: [
+                    setattr(self, "zombies", 0),
+                    reward.destroy(),
+                    reward.update(),
+                    self.use_lawn(),
+                    self.refresh_label(),
+                ],
+            ).pack(fill=BOTH, expand=True)
+            Button(
+                reward,
+                text="进度加十",
+                command=lambda: [
+                    self.progress(),
+                    reward.destroy(),
+                    reward.update(),
+                    self.use_lawn(),
+                    self.refresh_label(),
+                ],
+            ).pack(fill=BOTH, expand=True)
+            Button(
+                reward,
+                text="敌人增加归零",
+                command=lambda: [
+                    setattr(self, "zombies_come", False),
+                    reward.destroy(),
+                    reward.update(),
+                    self.use_lawn(),
+                    self.refresh_label(),
+                ],
+            ).pack(fill=BOTH, expand=True)
+            Button(
+                reward,
+                text="回复三血",
+                command=lambda: [
+                    self.fix_barricade(3),
+                    reward.destroy(),
+                    reward.update(),
+                    self.use_lawn(),
+                    self.refresh_label(),
+                ],
+            ).pack(fill=BOTH, expand=True)
+        else:
+            return
+
     def event_zombie_income(self):
         if self.zombies_come is False:
             self.zombies_come = True
             return
-        if 0 <= self.garage < 40:
+        elif 0 <= self.garage < 40:
             self.zombies += 1
+            self.new_zombies += 1
         elif 40 <= self.garage < 60:
             self.zombies += 2
+            self.new_zombies += 2
         elif 60 <= self.garage < 90:
             self.zombies += 3
-        elif 90 <= self.garage < 100:
+            self.new_zombies += 3
+        elif 90 <= self.garage:
             self.zombies += 4
-        else:
-            raise ValueError("Impossible garage value.")
+            self.new_zombies += 4
 
     def event_show_turn_result(self):
-        s = f"敌人变化{self.delta_zombies}，"
-        s += f"荣誉变化{self.delta_lawn}\n"
-        s += f"生命变化{self.delta_barricade}，"
-        s += f"进度变化{self.delta_garage}。\n"
+        s = f"敌人击杀{self.kill_zombies},"
+        s += f"敌人新增{self.new_zombies},"
+        s += f"荣誉增加{self.delta_lawn}\n"
+        s += f"生命变化{self.delta_barricade},"
+        s += f"进度提升{self.delta_garage}%。"
         if self.garage >= 100 and self.barricade > 0:
-            s += "WIN"
-        if self.barricade <= 0:
-            s += "LOSE"
-        self.delta_zombies = 0
+            s = "WIN\n"
+        elif self.barricade <= 0:
+            s = "LOSE\n"
+        self.kill_zombies = 0
+        self.new_zombies = 0
         self.delta_lawn = 0
         self.delta_barricade = 0
         self.delta_garage = 0
@@ -227,21 +284,17 @@ class GUI:
     def turn(self):
         if self.garage >= 100 and self.barricade > 0:
             return
-        if self.barricade <= 0:
+        elif self.barricade <= 0:
             return
-        try:
-            self.event_zombie_income()
-        except:
-            traceback.print_exc()
-            self.info.set("进度值出错")
         try:
             self.event_on_action()
         except:
             traceback.print_exc()
-            self.info.set("总和必须是4")
+            self.info.set("总和必须是4\n")
             return
         self.event_zombies_attack()
-        # self.event_make_reward_decision()
+        self.event_make_reward_decision()
+        self.event_zombie_income()
         self.event_show_turn_result()
 
     def run(self):
