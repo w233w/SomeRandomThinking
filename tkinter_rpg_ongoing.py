@@ -102,7 +102,7 @@ class UI:
 
     def main_page(self):
         # 上半部分
-        self.Upper = tk.Frame(self.main_frame)
+        self.Upper = tk.Frame(self.main_frame, padx=2)
         self.Upper.place(relheight=0.25, relwidth=1, relx=0, rely=0)
 
         # 名字
@@ -247,15 +247,7 @@ class UI:
         self.back_buttom.pack(side="bottom")
 
     def shop_page(self):
-        self.back_buttom = tk.Button(
-            self.shop_frame,
-            text="Back",
-            width=15,
-            command=lambda: self.tabview.select(self.main_frame),
-        )
-        self.back_buttom.pack(side="bottom")
-
-        self.currency_frame = tk.Frame(self.shop_frame)
+        self.currency_frame = tk.Frame(self.shop_frame, padx=2)
         self.currency_frame.place(relx=0, rely=0, relheight=1 / 8, relwidth=1)
 
         self.gold = tk.StringVar()
@@ -267,10 +259,45 @@ class UI:
         )
         self.gold_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        self.shopping_frame = tk.Frame(self.shop_frame, padx=2, pady=10)
+        self.shopping_frame.place(relx=0, rely=1 / 8, relheight=7 / 8, relwidth=1)
+
+        self.shopping_item1 = tk.Label(self.shopping_frame, text="1号商品")
+        self.shopping_item1.place(relx=0, rely=0, relheight=1 / 7, relwidth=0.7)
+        self.shopping_button1 = tk.Button(self.shopping_frame, text="shop_item1")
+        self.shopping_button1.place(relx=0.7, rely=0, relheight=1 / 7, relwidth=0.3)
+
+        self.shop_item_dict = {
+            "test": 20,
+            "test2": 10,
+        }
+
+        # 在按钮可用性层面解决购买金钱不够的情况
+        def shopping_item(item: str):
+            price = self.shop_item_dict.get(item, 0)
+            match item:
+                case "test":
+                    self.values.gold -= price
+                    self.values.sans += 3
+
+        self.shopping_button1.config(command=lambda: shopping_item("test2"))
+
+        self.back_buttom = tk.Button(
+            self.shopping_frame,
+            text="Back",
+            width=15,
+            command=lambda: self.tabview.select(self.main_frame),
+        )
+        self.back_buttom.pack(side="bottom")
+
         self.update_shop()
 
-    def update_shop(self):
+    def refresh_shop(self):
+        self.values.gold += 1
         self.gold.set(self.values.gold)
+
+    def update_shop(self):
+        self.refresh_shop()
         self.root.after(100, self.update_shop)
 
     def skill_page(self):
@@ -325,6 +352,14 @@ class UI:
         else:
             self.t1.config(bg="cyan")
         self.t1flag = not self.t1flag
+
+    def update_status(self, message):
+        self.status.set(message)
+        self.root.after(1500, self.reset_status)
+
+    def reset_status(self, event):
+        pass
+        self.status.set(" ...")
 
     def run(self):
         self.root.mainloop()
