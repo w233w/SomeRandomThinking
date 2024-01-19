@@ -6,26 +6,34 @@ from itertools import count
 class Dice:
     ids = count()
 
-    def __init__(self, faces: int = 6) -> None:
+    def __init__(self, faces: int = 6, temp: bool = False) -> None:
         self.faces = faces
         self.id: int = next(Dice.ids)
         self.values = list(range(1, faces + 1))
         self.last_roll: int = None
+        self.prepare_to_add = False
+        self.temp = temp
 
     def __str__(self) -> str:
         return f"D{self.faces}"
 
-    def __eq__(self, o: object) -> bool:
-        if not isinstance(o, Dice):
-            raise TypeError(f"Can't compare dice with {o.__class__}")
-        return self.faces == o.faces
+    def __repr__(self) -> str:
+        return f"<ID:{self.id} | Adding:{self.prepare_to_add} | TMP:{self.temp}>"
 
-    def __lt__(self, o: object) -> bool:
-        if not isinstance(o, Dice):
-            raise TypeError(f"Can't compare dice with {o.__class__}")
-        return self.faces < o.faces
+    def add_face(self) -> None:
+        if self.temp:
+            self.prepare_to_add = False
+        elif self.prepare_to_add:
+            self.faces += 1
+            self.values.append(self.faces)
+            self.prepare_to_add = False
+        elif self.faces < 6:
+            self.prepare_to_add = True
+        else:
+            self.prepare_to_add = False
 
     def roll(self) -> int:
+        self.prepare_to_add = False
         self.last_roll = random.choice(self.values)
         return self.last_roll
 
@@ -34,6 +42,7 @@ class Controller:
     def __init__(self) -> None:
         self.turn: int = 0
 
+        # list都是预留给后面的内容的，当前只看最后的那个值。
         self.dices: int = [6, 6, 5, 4, 4]
         self.available: list[Dice] = []
         for d_face in self.dices:
@@ -89,6 +98,9 @@ class Controller:
     def roll(self) -> None:
         values = [dice.roll() for dice in self.on_board]
         regen = max([v for v in values if values.count(v) > 1] + [0])
+        temp = max([v for v in values if values.count(v) > 2] + [0])
+        if 2 >= temp > 0:
+            self.available.append(Dice(7 - temp, True))
         self.rolleded.extend(self.on_board)
         self.on_board.clear()
         self.can_roll = False
@@ -128,8 +140,15 @@ class Controller:
         self.e_hp += self.enemy_last_regen[-1]
         self.e_hp -= self.enemy_last_lose[-1]
 
+        for dice in self.available:
+            dice.add_face()
+        for dice in self.e_available:
+            dice.add_face()
+
         self.rolled = False
-        self.available.extend(self.resting)
+        for dice in self.resting:
+            if not dice.temp:
+                self.available.append(dice)
         self.resting.clear()
         self.resting.extend(self.rolleded)
         self.rolleded.clear()
@@ -254,6 +273,9 @@ class UI:
                 command=lambda d=dice: [self.game.on_select(d), self.render()],
                 state="disabled" if self.game.rolled else "normal",
                 font=("simhei", 8, "bold"),
+                bg="#ffb3a7"
+                if dice.prepare_to_add
+                else ("yellow" if dice.temp else None),
             ).pack(side="left")
         for i, dice in enumerate(self.game.resting):
             tk.Button(
@@ -261,6 +283,7 @@ class UI:
                 text=dice,
                 state="disabled",
                 font=("simhei", 8, "bold"),
+                bg="yellow" if dice.temp else None,
             ).pack(side="left")
         for widget in self.self_field_onboard.winfo_children():
             widget.destroy()
