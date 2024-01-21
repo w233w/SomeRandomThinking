@@ -32,7 +32,7 @@ class UI:
         # 菜单
         self.menubar = tk.Menu(self.root)
         self.menu_start = tk.Menu(self.menubar, tearoff=0)
-        self.menu_start.add_command(label="Save Manually", command=None)
+        self.menu_start.add_command(label="Save Manually", command=lambda: print("on going"))
         self.menu_start.add_separator()
         self.menu_start.add_command(label="Exit", command=self.root.destroy)
         self.menubar.add_cascade(label="Game", menu=self.menu_start)
@@ -40,8 +40,8 @@ class UI:
 
         # 主体
         self.style = ttk.Style()
-        self.style.layout("Tabless.TNotebook.Tab", [])  # turn off tabs
-        self.tabview = ttk.Notebook(self.root, style="Tabless.TNotebook")
+        self.style.layout("Tab_less.TNotebook.Tab", [])  # turn off tabs
+        self.tabview = ttk.Notebook(self.root, style="Tab_less.TNotebook")
         self.tabview.pack(expand=True, fill=tk.BOTH)
 
         # 状态栏
@@ -81,9 +81,9 @@ class UI:
         self.challenge_frame.pack(fill=tk.BOTH, expand=True)
         self.tabview.add(self.challenge_frame, text="Challenge")
 
-        self.archivement_frame = tk.Frame(self.tabview)
-        self.archivement_frame.pack(fill=tk.BOTH, expand=True)
-        self.tabview.add(self.archivement_frame, text="Archivement")
+        self.achievement_frame = tk.Frame(self.tabview)
+        self.achievement_frame.pack(fill=tk.BOTH, expand=True)
+        self.tabview.add(self.achievement_frame, text="Achievement")
 
         self.setting_frame = tk.Frame(self.tabview)
         self.setting_frame.pack(fill=tk.BOTH, expand=True)
@@ -97,7 +97,7 @@ class UI:
         self.shop_page()
         self.skill_page()
         self.challenge_page()
-        self.archivement_page()
+        self.achievement_page()
         self.setting_page()
 
     def main_page(self):
@@ -155,56 +155,56 @@ class UI:
         self.Lower.place(relheight=0.75, relwidth=1, relx=0, rely=0.25)
 
         # 地图
-        self.map_buttom = tk.Button(self.Lower, text="Map", width=12)
-        self.map_buttom.place(relx=0.25, rely=0.125, relheight=0.2, anchor=tk.CENTER)
-        self.map_buttom.config(command=lambda: self.tabview.select(self.map_frame))
+        self.map_button = tk.Button(self.Lower, text="Map", width=12)
+        self.map_button.place(relx=0.25, rely=0.125, relheight=0.2, anchor=tk.CENTER)
+        self.map_button.config(command=lambda: self.tabview.select(self.map_frame))
 
         # 仪式
-        self.ritual_buttom = tk.Button(self.Lower, text="Ritual", width=12)
-        self.ritual_buttom.place(relx=0.75, rely=0.125, relheight=0.2, anchor=tk.CENTER)
-        self.ritual_buttom.config(
+        self.ritual_button = tk.Button(self.Lower, text="Ritual", width=12)
+        self.ritual_button.place(relx=0.75, rely=0.125, relheight=0.2, anchor=tk.CENTER)
+        self.ritual_button.config(
             command=lambda: self.tabview.select(self.ritual_frame)
         )
 
         # 物品
-        self.items_buttom = tk.Button(self.Lower, text="Items", width=12)
-        self.items_buttom.place(relx=0.25, rely=0.375, relheight=0.2, anchor=tk.CENTER)
-        self.items_buttom.config(command=lambda: self.tabview.select(self.items_frame))
+        self.items_button = tk.Button(self.Lower, text="Items", width=12)
+        self.items_button.place(relx=0.25, rely=0.375, relheight=0.2, anchor=tk.CENTER)
+        self.items_button.config(command=lambda: self.tabview.select(self.items_frame))
 
         # 商店
-        self.shop_buttom = tk.Button(self.Lower, text="Shop", width=12)
-        self.shop_buttom.place(relx=0.75, rely=0.375, relheight=0.2, anchor=tk.CENTER)
-        self.shop_buttom.config(command=lambda: self.tabview.select(self.shop_frame))
+        self.shop_button = tk.Button(self.Lower, text="Shop", width=12)
+        self.shop_button.place(relx=0.75, rely=0.375, relheight=0.2, anchor=tk.CENTER)
+        self.shop_button.config(command=lambda: self.tabview.select(self.shop_frame))
 
         # 技能
-        self.skill_buttom = tk.Button(self.Lower, text="Skill", width=12)
-        self.skill_buttom.place(relx=0.25, rely=0.625, relheight=0.2, anchor=tk.CENTER)
-        self.skill_buttom.config(command=lambda: self.tabview.select(self.skill_frame))
+        self.skill_button = tk.Button(self.Lower, text="Skill", width=12)
+        self.skill_button.place(relx=0.25, rely=0.625, relheight=0.2, anchor=tk.CENTER)
+        self.skill_button.config(command=lambda: self.tabview.select(self.skill_frame))
 
         # 挑战
-        self.challenge_buttom = tk.Button(self.Lower, text="Challenge", width=12)
-        self.challenge_buttom.place(
+        self.challenge_button = tk.Button(self.Lower, text="Challenge", width=12)
+        self.challenge_button.place(
             relx=0.75, rely=0.625, relheight=0.2, anchor=tk.CENTER
         )
-        self.challenge_buttom.config(
+        self.challenge_button.config(
             command=lambda: self.tabview.select(self.challenge_frame)
         )
 
         # 成就
-        self.archivement_buttom = tk.Button(self.Lower, text="Archivement", width=12)
-        self.archivement_buttom.place(
+        self.achievement_button = tk.Button(self.Lower, text="Achievement", width=12)
+        self.achievement_button.place(
             relx=0.25, rely=0.875, relheight=0.2, anchor=tk.CENTER
         )
-        self.archivement_buttom.config(
-            command=lambda: self.tabview.select(self.archivement_frame)
+        self.achievement_button.config(
+            command=lambda: self.tabview.select(self.achievement_frame)
         )
 
         # 设置
-        self.setting_buttom = tk.Button(self.Lower, text="Setting", width=12)
-        self.setting_buttom.place(
+        self.setting_button = tk.Button(self.Lower, text="Setting", width=12)
+        self.setting_button.place(
             relx=0.75, rely=0.875, relheight=0.2, anchor=tk.CENTER
         )
-        self.setting_buttom.config(
+        self.setting_button.config(
             command=lambda: self.tabview.select(self.setting_frame)
         )
 
@@ -212,46 +212,46 @@ class UI:
 
     def update_main(self):
         self.name.set(self.values.name)
-        self.rank.set(self.values.rank)
-        self.insight.set(self.values.insight)
-        self.sans.set(self.values.sans)
+        self.rank.set(str(self.values.rank))
+        self.insight.set(str(self.values.insight))
+        self.sans.set(str(self.values.sans))
         self.twist_rate.set(str(self.values.twist_rate) + "%")
         self.root.after(100, self.update_main)
 
     # 选择地图后直接开始行动，触发事件会提示，30秒不理会则跳过
     def map_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.map_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
 
     def ritual_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.ritual_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
 
     def items_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.items_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
 
     def shop_page(self):
         self.currency_frame = tk.Frame(self.shop_frame, padx=2)
         self.currency_frame.place(relx=0, rely=0, relheight=1 / 8, relwidth=1)
 
         self.gold = tk.StringVar()
-        self.gold.set(self.values.gold)
+        self.gold.set(str(self.values.gold))
         self.gold_tag = tk.Label(self.currency_frame, text="金钱", bd=1, relief="ridge")
         self.gold_tag.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.gold_label = tk.Label(
@@ -282,71 +282,71 @@ class UI:
 
         self.shopping_button1.config(command=lambda: shopping_item("test2"))
 
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.shopping_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
 
         self.update_shop()
 
     def refresh_shop(self):
         self.values.gold += 1
-        self.gold.set(self.values.gold)
+        self.gold.set(str(self.values.gold))
 
     def update_shop(self):
         self.refresh_shop()
         self.root.after(100, self.update_shop)
 
     def skill_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.skill_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
         pass
 
     def challenge_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.challenge_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
         pass
 
-    def archivement_page(self):
-        self.back_buttom = tk.Button(
-            self.archivement_frame,
+    def achievement_page(self):
+        self.back_button = tk.Button(
+            self.achievement_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
         pass
 
     def setting_page(self):
-        self.back_buttom = tk.Button(
+        self.back_button = tk.Button(
             self.setting_frame,
             text="Back",
             width=15,
             command=lambda: self.tabview.select(self.main_frame),
         )
-        self.back_buttom.pack(side="bottom")
+        self.back_button.pack(side="bottom")
 
         self.t1flag = True
         self.t1 = tk.Label(self.setting_frame, bg="red")
         self.t1.pack(fill="both", expand=1)
         self.t2 = tk.Label(self.setting_frame, bg="green", text="hover")
         self.t2.pack(fill="both", expand=1)
-        self.t2.bind("<Enter>", self.foo)
+        self.t2.bind("<Enter>", lambda e: self.foo())
 
-    def foo(self, event):
+    def foo(self):
         if self.t1flag:
             self.t1.config(bg="blue")
         else:
@@ -357,7 +357,7 @@ class UI:
         self.status.set(message)
         self.root.after(1500, self.reset_status)
 
-    def reset_status(self, event):
+    def reset_status(self):
         pass
         self.status.set(" ...")
 

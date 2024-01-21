@@ -10,7 +10,7 @@ class Dice:
         self.faces = faces
         self.id: int = next(Dice.ids)
         self.values = list(range(1, faces + 1))
-        self.last_roll: int = None
+        self.last_roll: int = 0
         self.prepare_to_add = False
         self.temp = temp
 
@@ -43,24 +43,24 @@ class Controller:
         self.turn: int = 0
 
         # list都是预留给后面的内容的，当前只看最后的那个值。
-        self.dices: int = [6, 6, 5, 4, 4]
+        self.dices: list[int] = [6, 6, 5, 4, 4]
         self.available: list[Dice] = []
         for d_face in self.dices:
             self.available.append(Dice(d_face))
         self.on_board: list[Dice] = []
-        self.rolleded: list[Dice] = []
+        self.roll_result: list[Dice] = []
         self.resting: list[Dice] = []
         self.hp: int = 20
 
         self.can_roll: bool = False
         self.rolled: bool = False
 
-        self.e_dices: int = [6, 6, 6, 6, 6]
+        self.e_dices: list[int] = [6, 6, 6, 6, 6]
         self.e_available: list[Dice] = []
         for e_d_face in self.e_dices:
             self.e_available.append(Dice(e_d_face))
         self.e_on_board: list[Dice] = []
-        self.e_rolleded: list[Dice] = []
+        self.e_roll_result: list[Dice] = []
         self.e_resting: list[Dice] = []
         self.e_hp: int = 20
 
@@ -90,7 +90,7 @@ class Controller:
             self.on_board.remove(dice)
             self.can_roll = 4 >= len(self.on_board) >= 1
 
-    def enemy_strat(self) -> None:
+    def enemy_strategy(self) -> None:
         e_roll_num = random.randint(1, min(4, len(self.e_available)))
         for _ in range(e_roll_num):
             self.e_on_board.append(self.e_available.pop())
@@ -101,16 +101,16 @@ class Controller:
         temp = max([v for v in values if values.count(v) > 2] + [0])
         if 2 >= temp > 0:
             self.available.append(Dice(7 - temp, True))
-        self.rolleded.extend(self.on_board)
+        self.roll_result.extend(self.on_board)
         self.on_board.clear()
         self.can_roll = False
         self.rolled = True
 
-        self.enemy_strat()
+        self.enemy_strategy()
 
         e_values = [dice.roll() for dice in self.e_on_board]
         e_regen = max([v for v in e_values if e_values.count(v) > 1] + [0])
-        self.e_rolleded.extend(self.e_on_board)
+        self.e_roll_result.extend(self.e_on_board)
         self.e_on_board.clear()
 
         self.self_last_roll.append(sum(values))
@@ -146,17 +146,17 @@ class Controller:
             dice.add_face()
 
         self.rolled = False
-        for dice in self.resting:
-            if not dice.temp:
-                self.available.append(dice)
+        self.available.extend(self.resting)
         self.resting.clear()
-        self.resting.extend(self.rolleded)
-        self.rolleded.clear()
+        for dice in self.roll_result:
+            if not dice.temp:
+                self.resting.append(dice)
+        self.roll_result.clear()
 
         self.e_available.extend(self.e_resting)
         self.e_resting.clear()
-        self.e_resting.extend(self.e_rolleded)
-        self.e_rolleded.clear()
+        self.e_resting.extend(self.e_roll_result)
+        self.e_roll_result.clear()
 
 
 class UI:
@@ -172,22 +172,22 @@ class UI:
         self.menubar = tk.Menu(self.root)
         self.menu_start = tk.Menu(self.menubar, tearoff=0)
         self.menu_start.add_command(label="Restart", command=self.restart)
-        self.menu_start.add_command(label="Help", command=None)
+        self.menu_start.add_command(label="Help", command="")
         self.menu_start.add_separator()
         self.menu_start.add_command(label="Exit", command=self.root.destroy)
         self.menubar.add_cascade(label="Game", menu=self.menu_start)
         self.root.config(menu=self.menubar)
 
         # 主界面，分上下两部分
-        self.upframe = tk.Frame(self.root, bd=1, relief="raised")
-        self.upframe.place(relheight=0.4, relwidth=1, relx=0, rely=0)
-        self.downframe = tk.Frame(self.root, bd=1, relief="raised")
-        self.downframe.place(relheight=0.6, relwidth=1, relx=0, rely=0.4)
+        self.up_frame = tk.Frame(self.root, bd=1, relief="raised")
+        self.up_frame.place(relheight=0.4, relwidth=1, relx=0, rely=0)
+        self.down_frame = tk.Frame(self.root, bd=1, relief="raised")
+        self.down_frame.place(relheight=0.6, relwidth=1, relx=0, rely=0.4)
 
         # 上部分-enemy，分左右两部分
-        self.enemy_field = tk.Frame(self.upframe)
+        self.enemy_field = tk.Frame(self.up_frame)
         self.enemy_field.place(relheight=1, relwidth=0.7, relx=0, rely=0)
-        self.enemy_info = tk.Frame(self.upframe, bd=1, relief="raised")
+        self.enemy_info = tk.Frame(self.up_frame, bd=1, relief="raised")
         self.enemy_info.place(relheight=1, relwidth=0.3, relx=0.7, rely=0)
 
         # enemy左部分，分上下两部分
@@ -196,7 +196,7 @@ class UI:
         self.enemy_field_onboard = tk.Frame(self.enemy_field)
         self.enemy_field_onboard.place(relheight=0.5, relwidth=1, relx=0, rely=0.5)
 
-        # enemy右部分-enemyinfo,hp
+        # enemy右部分-enemy_info,hp
         self.enemy_info_text = tk.StringVar()
         self.enemy_info_text_label = tk.Label(
             self.enemy_info, textvariable=self.enemy_info_text
@@ -204,11 +204,11 @@ class UI:
         self.enemy_info_text_label.pack(fill="both", expand=True)
 
         # 下部分-self， 分左右下三部分
-        self.self_field = tk.Frame(self.downframe)
+        self.self_field = tk.Frame(self.down_frame)
         self.self_field.place(relheight=2 / 3, relwidth=0.7, relx=0, rely=0)
-        self.self_info = tk.Frame(self.downframe, bd=1, relief="raised")
+        self.self_info = tk.Frame(self.down_frame, bd=1, relief="raised")
         self.self_info.place(relheight=2 / 3, relwidth=0.3, relx=0.7, rely=0)
-        self.self_action_button = tk.Frame(self.downframe)
+        self.self_action_button = tk.Frame(self.down_frame)
         self.self_action_button.place(relheight=1 / 3, relwidth=1, relx=0, rely=2 / 3)
 
         # self左部分-self台面，分上下两部分
@@ -217,7 +217,7 @@ class UI:
         self.self_field_available = tk.Frame(self.self_field)
         self.self_field_available.place(relheight=0.5, relwidth=1, relx=0, rely=0.5)
 
-        # self右部分-selfinfo，hp
+        # self右部分-self_info，hp
         self.self_info_text = tk.StringVar()
         self.self_info_text_label = tk.Label(
             self.self_info, textvariable=self.self_info_text
@@ -262,16 +262,16 @@ class UI:
             )
         self.self_info_text.set(hp_text)
         self.enemy_info_text.set(e_hp_text)
-        self.roll_bottom.config(state="normal" if self.game.can_roll else "disabled")
-        self.end_bottom.config(state="normal" if self.game.rolled else "disabled")
+        self.roll_bottom.config(state=tk.NORMAL if self.game.can_roll else tk.DISABLED)
+        self.end_bottom.config(state=tk.NORMAL if self.game.can_roll else tk.DISABLED)
         for widget in self.self_field_available.winfo_children():
             widget.destroy()
         for i, dice in enumerate(self.game.available):
             tk.Button(
                 self.self_field_available,
-                text=dice,
+                text=str(dice),
                 command=lambda d=dice: [self.game.on_select(d), self.render()],
-                state="disabled" if self.game.rolled else "normal",
+                state=tk.DISABLED if self.game.rolled else tk.NORMAL,
                 font=("simhei", 8, "bold"),
                 bg="#ffb3a7"
                 if dice.prepare_to_add
@@ -280,7 +280,7 @@ class UI:
         for i, dice in enumerate(self.game.resting):
             tk.Button(
                 self.self_field_available,
-                text=dice,
+                text=str(dice),
                 state="disabled",
                 font=("simhei", 8, "bold"),
                 bg="yellow" if dice.temp else None,
@@ -290,21 +290,23 @@ class UI:
         for i, dice in enumerate(self.game.on_board):
             tk.Button(
                 self.self_field_onboard,
-                text=dice,
+                text=str(dice),
                 command=lambda d=dice: [self.game.on_unselect(d), self.render()],
                 font=("simhei", 8, "bold"),
+                bg="yellow" if dice.temp else None,
             ).pack(side="left", anchor="center")
-        for i, dice in enumerate(self.game.rolleded):
+        for i, dice in enumerate(self.game.roll_result):
             tk.Button(
                 self.self_field_onboard,
                 text=dice.last_roll,
                 state="disabled",
                 font=("simhei", 8, "bold"),
+                bg="yellow" if dice.temp else None,
             ).pack(side="left")
 
         for widget in self.enemy_field_onboard.winfo_children():
             widget.destroy()
-        for i, dice in enumerate(self.game.e_rolleded):
+        for i, dice in enumerate(self.game.e_roll_result):
             tk.Button(
                 self.enemy_field_onboard,
                 text=dice.last_roll,
@@ -316,13 +318,13 @@ class UI:
         for i, dice in enumerate(self.game.e_available):
             tk.Button(
                 self.enemy_field_available,
-                text=dice,
+                text=str(dice),
                 font=("simhei", 8, "bold"),
             ).pack(side="left", anchor="center")
         for i, dice in enumerate(self.game.e_resting):
             tk.Button(
                 self.enemy_field_available,
-                text=dice,
+                text=str(dice),
                 state="disabled",
                 font=("simhei", 8, "bold"),
             ).pack(side="left", anchor="center")
