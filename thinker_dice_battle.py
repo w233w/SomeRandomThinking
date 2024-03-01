@@ -1,6 +1,22 @@
 import tkinter as tk
 import random
 from itertools import count
+# dice game
+# You and your opponent initially own 5 dices.
+# for every round:
+# you have to select 1 to 4 dices and roll them.
+# At the same time your roll, your opponent will roll its dice.
+# calaluate the difference between two sum
+# player has lower sum lose HP, the value equal to the difference.
+
+# Rolled dice have to rest one round.
+# if a dice not in rest and you not roll it, the dice will angry.
+# if angry dice still not be rolled, it will +1 (eg, from D4 to D5) in the end of that turn and no more angry. Max dice faces is 6.
+
+# any time you rolled a "Pair", you restore HP as the value of pair dice (eg. pair of 2, you restore 2 HP).
+
+# any time you rolled a "Triple" with dice face 1 or 2, you gain temp dice (D6 if triple of 1, D5 if triple of 2).
+# Temp dice is gold, it can't angry, and disappear after roll.
 
 
 class Dice:
