@@ -1,130 +1,141 @@
-  import tkinter as tk
+import tkinter as tk
 import random
-from itertools import product
-from typing import Literal
+from itertools import count, product
 
-# p for poker game
+# dice game 1
+# Total 36 random rolled D6s are placed in 6*6 grid.
+# Click to select a dice, then click "reroll button" to reroll them.
+# You only have total 6 Rounds(T) and 36 Rerolls(R). Before any of them run out:
+# Your goal is to make any row, column, diagonal have the same number.
+# S stand for the number of dice you selected.
+
+# You can change the parameter at buttom of this file to change the game.
+# d_face is dice's faces in [1, d_face], g_size is grid size in [3, 6].
+# Rounds(T) will change to d_face, the Rerolls(R) will change to g_size ^ 2.
 
 
-class Poker:
-    def __init__(self, color: Literal["♠", "♥", "♣", "♦"], value: int) -> None:
-        self.color: Literal["♠", "♥", "♣", "♦"] = color
-        self.value: int = value
+class Dice:
+    ids = count()
+
+    def __init__(self, faces: int = 6) -> None:
+        self.faces: int = faces
+        self.id: int = next(Dice.ids)
+        self.values = list(range(1, faces + 1))
+        self.last_roll: int = self.roll()
 
     def __str__(self) -> str:
-        return f"{self.color}{'A' if self.value == 1 else self.value}"
+        return f"{self.last_roll}"
+
+    def __repr__(self) -> str:
+        return f"<D-{self.faces}|{self.last_roll}>"
+
+    def __eq__(self, __value: object) -> bool:
+        if isinstance(__value, Dice):
+            return self.last_roll == __value.last_roll
+        elif isinstance(__value, int):
+            return self.last_roll == __value
+        else:
+            raise ValueError()
+
+    def roll(self) -> None:
+        self.last_roll: int = random.choice(self.values)
+
+    @property
+    def color(self) -> str:
+        if self.last_roll == 1:
+            return "#a3ffb4"
+        elif self.last_roll == 2:
+            return "#fef65b"
+        elif self.last_roll == 3:
+            return "#66cdaa"
+        elif self.last_roll == 4:
+            return "#4a8bad"
+        elif self.last_roll == 5:
+            return "#a3b8c8"
+        elif self.last_roll == 6:
+            return "#d7b4ae"
 
 
 class Controller:
-    def __init__(self) -> None:
-        self.deck: list[Poker] = [
-            Poker(color, value)
-            for color, value in product(("♠", "♥", "♣", "♦"), range(1, 10))
+    def __init__(self, d_face: int = 6, size: int = 6) -> None:
+        if size < 3 or size > 6:
+            raise ValueError(r"size can only in [3, 6]")
+        self.size: int = size
+        self.d_face: int = d_face
+        self.grid: list[list[Dice]] = [
+            [Dice(d_face) for i in range(size)] for j in range(size)
         ]
-        random.shuffle(self.deck)
-        self.grids: list[list[Poker]] = [
-            [self.deck[i + j * 6] for i in range(6)] for j in range(6)
-        ]
-        self.fliped: set[tuple[int, int]] = set()
-        self.fliping: set[tuple[int, int]] = set()
-        self.available: set[tuple[int, int]] = set(product(range(6), range(6)))
-        self.warning: list[tuple[int, int]] = []
-        self.score = 0
-        self.target = random.randint(10, 16)
-        self.failed = False
+        self.selected: list[tuple[int]] = list(product(range(size), range(size)))
+        self.max_roll: int = 2 * (size**2)
+        self.max_turn: int = d_face + 1
+        self.roll()
 
-    def on_flip(self, coord: tuple[int, int]) -> None:
-        if self.failed:
-            self.fliping.clear()
-            self.available = set(product(range(6), range(6))).difference(self.fliped)
-            self.failed = False
-            return
-        self.available.clear()
-        self.fliping.add(coord)
-        values = [self.grids[row][col].value for col, row in self.fliping]
-        sums = sum(values)
-        if sums < self.target:
-            col, row = coord
-            for dir in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                y, x = col + dir[0], row + dir[1]
-                if (
-                    0 <= y < 6
-                    and 0 <= x < 6
-                    and (y, x) not in self.fliping
-                    and (y, x) not in self.fliped
-                ):
-                    self.available.add((y, x))
-            if len(self.available) == 0:
-                self.available = set([coord])
-                self.score -= 2
-                self.failed = True
-        elif sums == self.target:
-            self.fliped = self.fliped.union(self.fliping)
-            self.fliping.clear()
-            self.score += self.target
-            self.available = set(product(range(6), range(6))).difference(self.fliped)
-        elif sums > self.target:
-            self.available = set([coord])
-            self.score -= 2
-            self.failed = True
+    def reset(self):
+        self.__init__(self.d_face, self.size)
 
-    def can_call(self) -> bool:
-        return len(self.fliping) == 0
+    def roll(self):
+        if self.max_turn > 0:
+            self.max_turn -= 1
+            for i, row in enumerate(self.grid):
+                for j, dice in enumerate(row):
+                    if (j, i) in self.selected:
+                        dice.roll()
+            self.max_roll -= len(self.selected)
+            self.selected = []
 
-    def on_call(self) -> None:
-        rest = 36 - len(self.fliped)
-        self.available.clear()
-        self.fliping = set(product(range(6), range(6))).difference(self.fliped)
-        res = set()
-        for col, row in self.fliping:
-            res = res.union(self.dfs(col, row, 0, [], set()))
-            if len(res) >= 1:
-                self.warning.extend(res.pop())
-                self.score -= rest * 2
-                break
+    def on_select(self, coord):
+        if coord in self.selected:
+            self.selected.remove(coord)
         else:
-            self.score += rest
+            self.selected.append(coord)
 
-    def dfs(
-        self,
-        col: int,
-        row: int,
-        val: int,
-        hist: list[tuple[int, int]],
-        res: set[tuple[tuple[int, int]]],
-    ) -> set[tuple[tuple[int, int]]]:
-        val += self.grids[row][col].value
-        hist.append((col, row))
-        if val == self.target:
-            return {tuple(hist)}
-        elif val > self.target:
-            hist.remove((col, row))
-            val -= self.grids[row][col].value
-            return set()
-        for dir in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            y, x = col + dir[0], row + dir[1]
-            if (
-                0 <= y < 6
-                and 0 <= x < 6
-                and (y, x) not in hist
-                and (y, x) not in self.fliped
-            ):
-                res = res.union(self.dfs(y, x, val, hist, res))
-                if len(res) >= 1:
-                    return res
-        hist.remove((col, row))
-        val -= self.grids[row][col].value
-        return set()
+    def check_select(self, coord):
+        return coord in self.selected
+
+    @property
+    def can_roll(self):
+        return (
+            1 <= len(self.selected) <= self.max_roll
+            and self.max_roll > 0
+            and self.max_turn > 0
+        )
+
+    @property
+    def win(self):
+        for i in range(self.size):
+            # by row
+            for j in self.grid:
+                if j == [i + 1] * self.size:
+                    return "WIN"
+            # by col
+            ls = [self.grid[j][i].last_roll for j in range(self.size)]
+            if len(set(ls)) == 1:
+                return "WIN"
+        # down slope
+        down = [self.grid[i][i].last_roll for i in range(self.size)]
+        if len(set(down)) == 1:
+            return "WIN"
+        # up slope
+        up = [self.grid[i][self.size - 1 - i].last_roll for i in range(self.size)]
+        if len(set(up)) == 1:
+            return "WIN"
+        if not (self.max_roll > 0 and self.max_turn > 0):
+            return "LOSE"
+        return ""
 
 
 class UI:
-    def __init__(self) -> None:
+    def __init__(self, **kwarg) -> None:
         self.root = tk.Tk()
-        self.root.title("")
-        self.root.geometry("180x216")
+        self.root.title("mini")
+        self.root.geometry("200x150")
         self.root.resizable(width=False, height=False)
-        self.game = Controller()
 
+        d_face = kwarg.get("d_face", 6)
+        size = kwarg.get("size", 6)
+        self.game = Controller(d_face=d_face, size=size)
+
+        # 菜单
         self.menubar = tk.Menu(self.root)
         self.menu_start = tk.Menu(self.menubar, tearoff=0)
         self.menu_start.add_command(label="Restart", command=self.restart)
@@ -133,63 +144,64 @@ class UI:
         self.menubar.add_cascade(label="Game", menu=self.menu_start)
         self.root.config(menu=self.menubar)
 
-        # 主界面
-        self.score_frame = tk.Frame(self.root)
-        self.score_frame.place(relheight=1 / 6, relwidth=1, relx=0, rely=0)
-        self.card_frame = tk.Frame(self.root)
-        self.card_frame.place(relheight=5 / 6, relwidth=1, relx=0, rely=1 / 6)
+        self.field = tk.Frame(self.root, bd=1, relief="raised")
+        self.field.place(relheight=1, relwidth=3 / 4, relx=0, rely=0)
+        self.pannel = tk.Frame(self.root)
+        self.pannel.place(relheight=1, relwidth=1 / 4, relx=3 / 4, rely=0)
 
-        # 上边
-        self.score = tk.StringVar(value=f"Score: {self.game.score}")
-        self.score_label = tk.Label(self.score_frame, textvariable=self.score)
-        self.score_label.place(relheight=1, relwidth=0.4, relx=0, rely=0)
-        self.call_button = tk.Button(
-            self.score_frame,
-            text="Call",
-            command=lambda: [self.game.on_call(), self.render()],
+        self.info = tk.StringVar()
+        self.info_label = tk.Label(self.pannel, textvariable=self.info)
+        self.info_label.place(relheight=0.5, relwidth=1, relx=0, rely=0)
+        self.action_button = tk.Button(
+            self.pannel,
+            text="Reroll",
+            state="disabled",
+            command=lambda: [self.game.roll(), self.render()],
         )
-        self.call_button.place(relheight=1, relwidth=0.2, relx=0.4, rely=0)
-        self.target = tk.StringVar(value=f"Target: {self.game.target}")
-        self.target_label = tk.Label(self.score_frame, textvariable=self.target)
-        self.target_label.place(relheight=1, relwidth=0.4, relx=0.6, rely=0)
+        self.action_button.place(relheight=0.5, relwidth=1, relx=0, rely=0.5)
 
         self.render()
 
-    def restart(self) -> None:
-        self.game = Controller()
-        self.render()
-
-    def render(self) -> None:
-        self.score.set(f"Score: {self.game.score}")
-        self.target.set(f"Target: {self.game.target}")
-        self.call_button.config(state="active" if self.game.can_call() else "disabled")
-        for widget in self.card_frame.winfo_children():
+    def render(self):
+        info = f"R:{self.game.max_roll}\nT:{self.game.max_turn}\nS:{len(self.game.selected)}\n{self.game.win}"
+        self.info.set(info)
+        for widget in self.field.winfo_children():
             widget.destroy()
-        for i, row in enumerate(self.game.grids):
-            for j, poker in enumerate(row):
-                coord = (j, i)
+        for i, row in enumerate(self.game.grid):
+            for j, dice in enumerate(row):
                 tk.Button(
-                    self.card_frame,
-                    text=(
-                        poker
-                        if coord in self.game.fliped or coord in self.game.fliping
-                        else "?"
-                    ),
-                    command=lambda coord=coord: [
-                        self.game.on_flip(coord),
+                    self.field,
+                    text=dice,
+                    command=lambda coord=(j, i): [
+                        self.game.on_select(coord),
                         self.render(),
                     ],
-                    state="active" if coord in self.game.available else "disable",
-                    bg=(
-                        "pink"
-                        if coord in self.game.warning
-                        else ("yellow" if coord in self.game.fliped else None)
-                    ),
-                ).place(relheight=1 / 6, relwidth=1 / 6, relx=j / 6, rely=i / 6)
+                    bg=dice.color,
+                    bd=5 if self.game.check_select((j, i)) else 1,
+                    relief="ridge",
+                ).place(
+                    relheight=1 / self.game.size,
+                    relwidth=1 / self.game.size,
+                    relx=j * 1 / self.game.size,
+                    rely=i * 1 / self.game.size,
+                )
+        self.action_button.config(
+            state=(
+                "disabled"
+                if self.game.win != ""
+                else ("active" if self.game.can_roll else "disabled")
+            )
+        )
 
-    def run(self) -> None:
+    def restart(self):
+        self.game.reset()
+        self.render()
+
+    def run(self):
         self.root.mainloop()
 
 
 if __name__ == "__main__":
-    UI().run()
+    d_face = 6
+    g_size = 6
+    UI(d_face=d_face, size=g_size).run()
