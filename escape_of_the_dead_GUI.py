@@ -2,6 +2,9 @@ from tkinter import *
 import random
 import traceback
 
+# Simple implementation of Escape of the Dead Minigame
+# Source: https://boardgamegeek.com/boardgame/87632/escape-dead-minigame
+
 
 class GUI:
     def __init__(self) -> None:
