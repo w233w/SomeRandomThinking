@@ -279,7 +279,7 @@ class UI:
         self.self_info_text.set(hp_text)
         self.enemy_info_text.set(e_hp_text)
         self.roll_bottom.config(state=tk.NORMAL if self.game.can_roll else tk.DISABLED)
-        self.end_bottom.config(state=tk.NORMAL if self.game.can_roll else tk.DISABLED)
+        self.end_bottom.config(state=tk.NORMAL if self.game.rolled else tk.DISABLED)
         for widget in self.self_field_available.winfo_children():
             widget.destroy()
         for i, dice in enumerate(self.game.available):
