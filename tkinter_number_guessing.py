@@ -167,5 +167,5 @@ class UI:
     def run(self) -> None:
         self.root.mainloop()
 
-
-UI().run()
+if __name__ == "__main__":
+    UI().run()
