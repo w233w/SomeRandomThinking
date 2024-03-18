@@ -2,6 +2,7 @@ import pygame
 import random
 
 # 2D光线反射
+# 右键发射光线
 
 # 各类参数
 # 窗口大小
