@@ -6,17 +6,16 @@ from itertools import count
 # for every round:
 # you have to select 1 to 4 dices and roll them.
 # At the same time your roll, your opponent will roll its dice.
-# calaluate the difference between two sum
+# calculate the difference between two sum
 # player has lower sum lose HP, the value equal to the difference.
 
-# Rolled dice have to rest one round.
-# if a dice not in rest and you not roll it, the dice will angry.
-# if angry dice still not be rolled, it will +1 (eg, from D4 to D5) in the end of that turn and no more angry. Max dice faces is 6.
+# Rolled dice have to rest one round. if a die not in rest, and you not roll it, the dice will angry. if angry dice
+# still not be rolled, it will +1 (eg, from D4 to D5) in the end of that turn and no more angry. Max dice faces is 6.
 
-# any time you rolled a "Pair", you restore HP as the value of pair dice (eg. pair of 2, you restore 2 HP).
+# any time you rolled a "Pair", you restore HP as the value of pair dice (e.g. a pair of 2, you restore 2 HP).
 
 # any time you rolled a "Triple" with dice face 1 or 2, you gain temp dice (D6 if triple of 1, D5 if triple of 2).
-# Temp dice is gold, it can't angry, and disappear after roll.
+# Temp dice is gold, it can't be angry, and disappear after roll.
 
 
 class Dice:
@@ -188,7 +187,7 @@ class UI:
         self.menubar = tk.Menu(self.root)
         self.menu_start = tk.Menu(self.menubar, tearoff=0)
         self.menu_start.add_command(label="Restart", command=self.restart)
-        self.menu_start.add_command(label="Help", command="")
+        # self.menu_start.add_command(label="Help", command="")
         self.menu_start.add_separator()
         self.menu_start.add_command(label="Exit", command=self.root.destroy)
         self.menubar.add_cascade(label="Game", menu=self.menu_start)

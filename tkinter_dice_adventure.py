@@ -19,7 +19,7 @@ class Dice:
         self.id: int = next(Dice.ids)
         self.values = list(range(1, 7))
         self.value: int = value
-        self.last_roll: int = 0
+        self.last_roll: int = -1
         self.roll()
 
     def __str__(self) -> str:
@@ -32,7 +32,7 @@ class Dice:
     def __repr__(self) -> str:
         return f"<D-{self.faces}|{self.final}>"
 
-    def roll(self) -> int:
+    def roll(self) -> None:
         self.last_roll = random.choice(self.values)
 
     @property
@@ -134,13 +134,14 @@ class Controller:
 
     def dfs(self, col, row):
         self.selected.remove((col, row))
-        for dir in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            y, x = col + dir[0], row + dir[1]
+        for direction in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            y, x = col + direction[0], row + direction[1]
             if 0 <= y < self.size and 0 <= x < self.size and (y, x) in self.selected:
                 self.dfs(y, x)
         return
 
-    def help_info(self, index: Union[str, int]) -> str:
+    @staticmethod
+    def help_info(index: Union[str, int]) -> str:
         match index:
             case 1:
                 return "两相邻列/行。重掷后统计1到6点,重复越多dmg越高。"
@@ -441,12 +442,12 @@ class Controller:
 
     # 2. 所有的6点。6点num->伤害。
     def e_2(self):
-        count = 0
+        e_2_count = 0
         for i in range(self.size):
             for j in range(self.size):
                 if self.grid[i][j].last_roll == 6:
-                    count += 1
-        self.action(count, 0)
+                    e_2_count += 1
+        self.action(e_2_count, 0)
         self.e.turn_end()
 
     # 3.随机6个Dice。value-1。
@@ -498,7 +499,7 @@ class UI:
             "<Enter>",
             lambda e: [
                 self.helper_info.set(
-                    "敌人行动: " + self.game.help_info(self.game.e.skill_func_name())
+                    "敌人行动: " + self.game.help_info(self.game.e.skill_func_name)
                 )
             ],
         )
@@ -510,8 +511,8 @@ class UI:
                 tk.Button(
                     self.pannel,
                     text=f"a{i}",
-                    command=lambda i=i: [
-                        getattr(self.game, f"do_{i}")(),
+                    command=lambda ii=i: [
+                        getattr(self.game, f"do_{ii}")(),
                         self.render(),
                     ],
                 ),
@@ -523,14 +524,14 @@ class UI:
                 rely=(3 + ((i - 1) // 4)) / 6,
             )
             getattr(self, f"ability{i}_button").bind(
-                "<Enter>", lambda e, i=i: [self.helper_info.set(self.game.help_info(i))]
+                "<Enter>", lambda e, ii=i: [self.helper_info.set(self.game.help_info(ii))]
             )
 
         self.confirm_button = tk.Button(
             self.pannel,
             text="confirm",
             command=lambda: [
-                getattr(self.game, self.game.e.skill_func_name())(),
+                getattr(self.game, self.game.e.skill_func_name)(),
                 self.render(),
             ],
         )
@@ -558,7 +559,7 @@ class UI:
             for j, dice in enumerate(row):
                 tk.Button(
                     self.field,
-                    text=dice,
+                    text=str(dice),
                     command=lambda coord=(j, i): [
                         self.game.on_select(coord),
                         self.render(),

@@ -3,14 +3,15 @@ import random
 import numpy as np
 from itertools import product
 
-# Mineswepper-like game
+
+# Minesweeper-like game
 # Number show how many bomb around in 8 neighbors.
 # "+"， "➕", "x", "❌" help finding reward.
 #   "+" meaning no reward in same row and col, "➕" meaning have reward.
 #   "x" meaning no reward in cross "❌" meaning have reward in cross.
 # "🎁", "👑" are reward, find them all to win.
 # find any reward will expose one bomb without explode.
-# maxinum 2 bombs can explode before lose.
+# maximum 2 bombs can explode before lose.
 # first click must show a number.
 
 # TODO: Win rate are low, need modify rule.
@@ -85,8 +86,8 @@ class Controller:
                 else:
                     self.grid[row][col] = "X"
             else:
-                h = self.grid[:, col : col + 1]
-                v = self.grid[row : row + 1, :]
+                h = self.grid[:, col: col + 1]
+                v = self.grid[row: row + 1, :]
                 if "🎁" in h or "🎁" in v or "👑" in h or "👑" in v:
                     self.grid[row][col] = "➕"
                 else:
@@ -121,7 +122,7 @@ class UI:
         self.menubar = tk.Menu(self.root)
         self.menu_start = tk.Menu(self.menubar, tearoff=0)
         self.menu_start.add_command(label="Restart", command=self.restart)
-        self.menu_start.add_command(label="Heck", command=self.Heck)
+        self.menu_start.add_command(label="Heck", command=self.heck)
         self.menu_start.add_separator()
         self.menu_start.add_command(label="Exit", command=self.root.destroy)
         self.menubar.add_cascade(label="Game", menu=self.menu_start)
@@ -149,8 +150,8 @@ class UI:
                         if coord not in self.game.exposed and not self.game.game_over
                         else self.game.grid[i][j]
                     ),
-                    command=lambda coord=coord: [
-                        self.game.on_click(coord),
+                    command=lambda c=coord: [
+                        self.game.on_click(c),
                         self.render(),
                     ],
                     bg=color,
@@ -171,7 +172,7 @@ class UI:
         self.game.reset()
         self.render()
 
-    def Heck(self):
+    def heck(self):
         print(self.game.grid)
 
     def run(self):

@@ -7,7 +7,7 @@ from copy import deepcopy
 from pygame import Vector2
 
 # init
-enemy_pos = Vector2(9, 119)
+enemy_pos = Vector2(-88, 119)
 self_pos = Vector2(0, 0)
 num_of_ammo = 5
 inter_angle = np.radians(7)

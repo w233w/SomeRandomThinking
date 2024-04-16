@@ -1,6 +1,7 @@
 import random
 import tkinter as tk
 
+
 # number guessing game
 # Using classic rule, you need to guess a 4 digits non-repeat number. Leading 0 is allowed.
 # Every guess require you select 4 different numbers.
@@ -33,7 +34,7 @@ class GameController:
     @property
     def can_judge(self) -> bool:
         return (
-            not self.win and "-" not in self.selected and len(set(self.selected)) == 4
+                not self.win and "-" not in self.selected and len(set(self.selected)) == 4
         )
 
     def judge(self) -> None:
@@ -166,6 +167,7 @@ class UI:
 
     def run(self) -> None:
         self.root.mainloop()
+
 
 if __name__ == "__main__":
     UI().run()

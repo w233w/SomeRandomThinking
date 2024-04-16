@@ -4,14 +4,14 @@ from itertools import count, product
 
 # dice game 1
 # Total 36 random rolled D6s are placed in 6*6 grid.
-# Click to select a dice, then click "reroll button" to reroll them.
-# You only have total 6 Rounds(T) and 36 Rerolls(R). Before any of them run out:
+# Click to select a die, then click "re-roll button" to reroll them.
+# You only have total 6 Rounds(T) and 36 Re-rolls(R). Before any of them run out:
 # Your goal is to make any row, column, diagonal have the same number.
 # S stand for the number of dice you selected.
 
-# You can change the parameter at buttom of this file to change the game.
-# d_face is dice's faces in [1, d_face], g_size is grid size in [3, 6].
-# Rounds(T) will change to d_face, the Rerolls(R) will change to g_size ^ 2.
+# You can change the parameter at button of this file to change the game.
+# d_face is dices faces in [1, d_face], g_size is grid size in [3, 6].
+# Rounds(T) will change to d_face, the Re-rolls(R) will change to g_size ^ 2.
 
 
 class Dice:
@@ -21,7 +21,8 @@ class Dice:
         self.faces: int = faces
         self.id: int = next(Dice.ids)
         self.values = list(range(1, faces + 1))
-        self.last_roll: int = self.roll()
+        self.last_roll: int = -1
+        self.roll()
 
     def __str__(self) -> str:
         return f"{self.last_roll}"

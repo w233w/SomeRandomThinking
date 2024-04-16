@@ -47,6 +47,7 @@ def add_collision_handler():
         space.remove(arbiter.shapes[0])
         space.remove(arbiter.shapes[1])
         pos = pymunk.Vec2d(0, 0)
+        old_level: int = -1
         for spirit in balls.sprites():
             if spirit.shape in arbiter.shapes:
                 pos += spirit.shape.bb.center()

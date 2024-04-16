@@ -7,16 +7,16 @@ from typing import Literal
 # 36 poker cards from 4 colors and A to 9. THey are face down and randomly placed in a 6*6 girds.
 # for every round:
 # click any face down poker to flip.
-# but next card is this round can only be previous poker's 4 naighbor.
+# but next card is this round can only be previous poker's 4 neighbor.
 
-# Goal is to make the sum of flipped card's value exactly match to target. You can flip any number of card in a round until:
-# sum equal to target, all flipped card this round will keep face up and you win score equal to target.
-# sum larger than target, all flipped card in this round will become face down again and you lose 2 score.
-# Specially, if no available naighbor after flip, you lose the round no matter the sum.
+# Goal is to make the sum of flipped card's value exactly match to target. You can flip any number of card in a round
+# until: sum equal to target, all flipped card this round will keep face up, and you win score equal to target. sum
+# larger than target, all flipped card in this round will become face down again, and you lose 2 score. Specially,
+# if no available neighbor after flip, you lose the round no matter the sum.
 
-# since the poker card placed randomly, There is chance for some card can never be flipped.
-# click "call button" before start round will end the game, program will check the rest poker for you.
-# if all face down poker truely can't make any match, you win score equal to number of face down poker. Otherwise, you lost double score.
+# since the poker card placed randomly, There is chance for some card can never be flipped. click "call button"
+# before start round will end the game, program will check the rest poker for you. if all face down poker truly
+# can't make any match, you win score equal to number of face down poker. Otherwise, you lost double score.
 
 
 class Poker:
@@ -58,8 +58,8 @@ class Controller:
         sums = sum(values)
         if sums < self.target:
             col, row = coord
-            for dir in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                y, x = col + dir[0], row + dir[1]
+            for direction in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                y, x = col + direction[0], row + direction[1]
                 if (
                     0 <= y < 6
                     and 0 <= x < 6
@@ -68,7 +68,7 @@ class Controller:
                 ):
                     self.available.add((y, x))
             if len(self.available) == 0:
-                self.available = set([coord])
+                self.available = {coord}
                 self.score -= 2
                 self.failed = True
         elif sums == self.target:
@@ -77,7 +77,7 @@ class Controller:
             self.score += self.target
             self.available = set(product(range(6), range(6))).difference(self.fliped)
         elif sums > self.target:
-            self.available = set([coord])
+            self.available = {coord}
             self.score -= 2
             self.failed = True
 
@@ -114,8 +114,8 @@ class Controller:
             hist.remove((col, row))
             val -= self.grids[row][col].value
             return set()
-        for dir in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            y, x = col + dir[0], row + dir[1]
+        for direction in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            y, x = col + direction[0], row + direction[1]
             if (
                 0 <= y < 6
                 and 0 <= x < 6
@@ -188,8 +188,8 @@ class UI:
                         if coord in self.game.fliped or coord in self.game.fliping
                         else "?"
                     ),
-                    command=lambda coord=coord: [
-                        self.game.on_flip(coord),
+                    command=lambda c=coord: [
+                        self.game.on_flip(c),
                         self.render(),
                     ],
                     state="active" if coord in self.game.available else "disable",
