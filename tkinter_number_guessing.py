@@ -2,17 +2,17 @@ import random
 import tkinter as tk
 
 
-# number guessing game
-# Using classic rule, you need to guess a 4 digits non-repeat number. Leading 0 is allowed.
-# Every guess require you select 4 different numbers.
-# for every digit on the right position, you award 1 A.
-# for every digit not on the right position but exist on rest of selected number, you award 1 B.
-# your goal is to get 4 A, meaning selected number are the same as target.
+# Numbers guessing game
+# Using the classic rule, you have to guess a 4 digit non-repeating number. Leading 0 is allowed.
+# Each guess requires you to select 4 different numbers.
+# For each digit in the right position you score 1 A.
+# For each digit that is not in the correct position, but is present in the rest of the selected number, you score 1 B.
+# Your goal is to get 4 A's, meaning the number you have guessed is the same as the answer.
 
-# Guessing history will display on the right.
-# impossible number will be disabled for you.
+# Guessing history is displayed on the right.
+# Impossible number will be disabled for you.
 
-# GG on game menu will display the answer and end the round.
+# GG on the game menu will display the answer and end the round.
 
 
 class GameController:
@@ -29,12 +29,12 @@ class GameController:
 
     @property
     def win(self) -> bool:
-        return "WIN" in self.hist[-1] or "GG" in self.hist[-1]
+        return "WIN" in self.hist[-1] or "Give up" in self.hist[-1]
 
     @property
     def can_judge(self) -> bool:
         return (
-                not self.win and "-" not in self.selected and len(set(self.selected)) == 4
+            not self.win and "-" not in self.selected and len(set(self.selected)) == 4
         )
 
     def judge(self) -> None:
@@ -59,9 +59,11 @@ class GameController:
                     pass
         if a + b == 4:
             for i in range(4):
-                self.possible[i] = self.selected.copy()
+                self.possible[i] = [v for v in self.selected if v in self.possible[i]]
         if a == 4:
             self.hist.append(f"{''.join(self.selected)}:WIN!")
+            for i in range(4):
+                self.possible[i].clear()
             return
         self.hist.append(f"{''.join(self.selected)}:{a}A|{b}B")
         self.selected = ["-", "-", "-", "-"]
@@ -75,7 +77,9 @@ class GameController:
             self.selected[index] = val
 
     def on_gg(self) -> None:
-        self.hist.append(f"{self.target}:GG")
+        self.hist.append(f"{self.target}:Give up")
+        for i in range(4):
+            self.possible[i].clear()
 
 
 class UI:
@@ -94,7 +98,7 @@ class UI:
             label="Restart", command=lambda: [self.game.restart(), self.render()]
         )
         self.menu_start.add_command(
-            label="GG", command=lambda: [self.game.on_gg(), self.render()]
+            label="Give up", command=lambda: [self.game.on_gg(), self.render()]
         )
         self.menu_start.add_separator()
         self.menu_start.add_command(label="Exit", command=self.root.destroy)
