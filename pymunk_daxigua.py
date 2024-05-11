@@ -56,7 +56,7 @@ def add_collision_handler():
         pos /= 2
         Ball(pos, old_level + 1, space, balls)
 
-    for i in range(1, 8):
+    for i in range(1, 7):
         space.add_collision_handler(i, i).post_solve = post_collision_ball_ball
 
 
