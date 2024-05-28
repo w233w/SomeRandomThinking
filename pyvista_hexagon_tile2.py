@@ -91,8 +91,8 @@ class HexCylinder:
                 ]
             )
 
-    def get_meshs(self, neighbor_heights: list[int] = [0] * 6):
-        # 返回每一块
+    def get_meshes(self, neighbor_heights: list[int] = [0] * 6):
+        """返回每一块"""
         if len(neighbor_heights) != 6:
             raise ValueError()
 
@@ -132,14 +132,14 @@ class HexCylinder:
         return results
 
     def get_mesh(self, neighbor_heights: list[int] = [0] * 6):
-        #'''返回一整块'''
+        """返回一整块"""
         if len(neighbor_heights) != 6:
             raise ValueError()
         faces = []
         # 点是自上而下的，顶面自然取前6个值
         top_face = [6, 0, 1, 2, 3, 4, 5]
         # 底面取最后6个值
-        buttom_face = [
+        bottom_face = [
             6,
             self.height * 6,
             self.height * 6 + 1,
@@ -149,7 +149,7 @@ class HexCylinder:
             self.height * 6 + 5,
         ]
         faces.append(top_face)
-        faces.append(buttom_face)
+        faces.append(bottom_face)
         num_faces = 2
         for i in range(6):
             # 计算和邻居的高度差，只在有差的地方绘制面
@@ -162,7 +162,7 @@ class HexCylinder:
             for j in range(delta_height):
                 # i用来取六边形上连续的两个点，如i=0时取0和1.
                 # j用来取高度
-                # 面的前两个点是高点，后两个点是低点
+                # 面的前两个点是高处的点，后两个点是低处的点
                 # 四个点的位置：
                 # 1 2
                 # 4 3
@@ -179,23 +179,23 @@ class HexCylinder:
 if __name__ == "__main__":
     pl = pv.Plotter()
 
-    x, y = 15, 15
+    row, col = 15, 15
 
     grids: dict[_Hex, int] = defaultdict(int)
 
-    for i in range(x):
-        for j in range(y):
-            grids[Hex(i, j, 0 - i - j)] = random.randint(5, 7)
+    for r in range(row):
+        for c in range(col):
+            grids[Hex(r, c, 0 - r - c)] = random.randint(5, 7)
 
-    for i in range(x):
-        for j in range(y):
-            hexgon = Hex(i, j, 0 - i - j)
+    for r in range(row):
+        for c in range(col):
+            hexagon = Hex(r, c, 0 - r - c)
             neighbor_heights: list[int] = []
-            for x in range(6):
-                nei = hex_neighbor(hexgon, x)
+            for k in range(6):
+                nei = hex_neighbor(hexagon, k)
                 neighbor_heights.append(grids[nei])
-            meshs = [HexCylinder(hexgon, grids[hexgon]).get_mesh(neighbor_heights)]
-            for m in meshs:
+            meshes = HexCylinder(hexagon, grids[hexagon]).get_meshes(neighbor_heights)
+            for m in meshes:
                 pl.add_mesh(
                     m,
                     color="w",
@@ -203,7 +203,7 @@ if __name__ == "__main__":
                     split_sharp_edges=True,
                     pbr=True,
                     metallic=1,
-                    roughness=0.5,
+                    roughness=0.3,
                 )
 
     pl.add_axes()
