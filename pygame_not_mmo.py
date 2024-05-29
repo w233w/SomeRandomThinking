@@ -34,8 +34,7 @@ import math
 # boss在四个角，四条边的中点召唤8个不动的敌人。每5秒，boss选择两组相邻且不重复的四个敌人赋予端点。
 
 
-WIDTH = 400
-HEIGHT = 400
+WIDTH = HEIGHT = 400
 FPS = 60.0
 SIZE = WIDTH, HEIGHT
 VSIZE = Vector2(*SIZE)
@@ -56,10 +55,11 @@ class Boss(pygame.sprite.Sprite):
     def __init__(self, *groups) -> None:
         super().__init__(*groups)
         self.pos = VSIZE // 2
-        self.image = pygame.Surface([100, 100])
+        self.size = VSIZE // 4
+        self.image = pygame.Surface(self.size)
         self.image.set_colorkey(BLACK)
         self.rect = self.image.get_rect(center=self.pos)
-        pygame.draw.circle(self.image, ORANGE, [50, 50], 20)
+        pygame.draw.circle(self.image, ORANGE, self.size // 2, WIDTH // 20)
         self.mask = pygame.mask.from_surface(self.image)
         self.wall_status = {"n": True, "e": True, "w": True, "s": True}
         self.walls = pygame.sprite.Group()
@@ -86,7 +86,7 @@ class Arrow(pygame.sprite.Sprite):
         self.pos = Vector2(pos)
         self.vect = Vector2(vect)
         self.pow = power
-        self.img_center = Vector2(36, 36)
+        self.img_center = VSIZE // 10
         self.image = pygame.Surface(self.img_center)
         self.image.set_colorkey(BLACK)
         self.rect = self.image.get_rect(center=self.pos)
@@ -103,10 +103,10 @@ class Arrow(pygame.sprite.Sprite):
         self.rect.center = self.pos
         # TODO 弓箭的射程？
         if (
-            self.pos.x < -20
-            or self.pos.x > 420
-            or self.pos.y < -520
-            or self.pos.y > 420
+            self.pos.x < -WIDTH // 20
+            or self.pos.x > WIDTH + WIDTH // 20
+            or self.pos.y < -HEIGHT // 20
+            or self.pos.y > HEIGHT + HEIGHT // 20
         ):
             self.kill()
 
@@ -167,41 +167,41 @@ class Addon(pygame.sprite.Sprite):
 class Obstacles(pygame.sprite.Sprite):
     def __init__(self, *groups) -> None:
         super().__init__(*groups)
-        self.x = 100
+        self.x = 0
         self.image = pygame.Surface([5, HEIGHT])
         self.image.set_colorkey(BLACK)
-        self.rect = self.image.get_rect(center=(self.x, 200))
-        pygame.draw.line(self.image, ALMOST_BLACK, (3, 0), (3, 400))
+        self.rect = self.image.get_rect(center=(self.x, HEIGHT // 2))
+        pygame.draw.line(self.image, ALMOST_BLACK, (3, 0), (3, HEIGHT))
         self.mask = pygame.mask.from_surface(self.image)
         self.move_to = 1
 
     def update(self, game_events):
-        if self.move_to == 1 and self.x >= 400:
+        if self.move_to == 1 and self.x >= WIDTH:
             self.move_to = -1
         elif self.move_to == -1 and self.x < 0:
             self.move_to = 1
         self.x += self.move_to
-        self.rect.center = (self.x, 200)
+        self.rect.center = (self.x, HEIGHT//2)
 
 
 class Obstacles2(pygame.sprite.Sprite):
     def __init__(self, *groups) -> None:
         super().__init__(*groups)
-        self.y = 10
+        self.y = 0
         self.image = pygame.Surface([WIDTH, 5])
         self.image.set_colorkey(BLACK)
-        self.rect = self.image.get_rect(center=(200, self.y))
-        pygame.draw.line(self.image, ALMOST_BLACK, (0, 3), (400, 3))
+        self.rect = self.image.get_rect(center=(WIDTH//2, self.y))
+        pygame.draw.line(self.image, ALMOST_BLACK, (0, 3), (WIDTH, 3))
         self.mask = pygame.mask.from_surface(self.image)
         self.move_to = 1
 
     def update(self, game_events):
-        if self.move_to == 1 and self.y >= 400:
+        if self.move_to == 1 and self.y >= HEIGHT:
             self.move_to = -1
         elif self.move_to == -1 and self.y < 0:
             self.move_to = 1
         self.y += self.move_to
-        self.rect.center = (200, self.y)
+        self.rect.center = (WIDTH // 2, self.y)
 
 
 class Player(pygame.sprite.Sprite):
@@ -210,8 +210,8 @@ class Player(pygame.sprite.Sprite):
         self.hp = 100
         self.color = RED
 
-        self.radius = 10
-        self.diameter = 20
+        self.radius = WIDTH // 40
+        self.diameter = WIDTH // 20
         self.pos = pos
         self.img_center = Vector2(self.diameter, self.diameter)
         self.image = pygame.Surface(self.img_center)
@@ -219,8 +219,8 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
         pygame.draw.circle(self.image, RED, self.img_center // 2, self.radius)
         self.mask = pygame.mask.from_surface(self.image)
-        self.font = pygame.font.SysFont("simhei", 10)
-        self.rerender()
+        self.font = pygame.font.SysFont("simhei", self.radius)
+        self.render()
 
         self.drawing_bow = False
         self.start_draw = 0
@@ -233,6 +233,7 @@ class Player(pygame.sprite.Sprite):
         down = pygame.key.get_pressed()[pygame.K_s]
         right = pygame.key.get_pressed()[pygame.K_d]
         speed_boost = 1 if self.drawing_bow else 2
+        global_boost = WIDTH / 400
         del_x = right - left
         del_y = down - up
         # 限制玩家不能离开屏幕
@@ -252,9 +253,9 @@ class Player(pygame.sprite.Sprite):
         speed = Vector2(del_x, del_y)
         if speed.length() != 0:
             speed.normalize_ip()
-        return speed_boost * speed
+        return speed_boost * global_boost * speed
 
-    def rerender(self, color: Tuple[int, int, int] = None):
+    def render(self, color: Tuple[int, int, int] = None):
         hp_text = self.font.render(str(self.hp), True, ALMOST_BLACK, None)
         text_size = self.font.size(str(self.hp))
         if color is not None:
@@ -268,7 +269,7 @@ class Player(pygame.sprite.Sprite):
         if self.hp <= 0:
             self.kill()
         if pygame.sprite.spritecollide(self, wall, False, pygame.sprite.collide_mask):
-            self.rerender()
+            self.render()
             self.hp -= 2
         # TODO 受击后无敌0.5秒?
 
@@ -295,11 +296,11 @@ class Player(pygame.sprite.Sprite):
             next_move *= 40
             self.dashed = True
             self.last_dash = pygame.time.get_ticks()
-            self.rerender(PINK)
+            self.render(PINK)
         # 闪避充能两秒
         elif self.dashed and pygame.time.get_ticks() - self.last_dash > 2000:
             self.dashed = False
-            self.rerender(RED)
+            self.render(RED)
 
         # 移动能力
         self.pos += next_move
@@ -310,10 +311,10 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, pos: Vector2, *groups) -> None:
         super().__init__(*groups)
         self.pos = pos
-        self.img_center = Vector2(20, 20)
-        self.image = pygame.Surface(self.img_center)
+        self.size = VSIZE // 20
+        self.image = pygame.Surface(self.size)
         self.image.set_colorkey(BLACK)
-        pygame.draw.circle(self.image, YELLOW, self.img_center / 2, 10)
+        pygame.draw.circle(self.image, YELLOW, self.size / 2, 10)
         self.rect = self.image.get_rect(center=self.pos)
         self.mask = pygame.mask.from_surface(self.image)
         self.hp = 10
@@ -367,13 +368,13 @@ while running := True:
     screen.fill(pygame.Color(BACKGROUND_COLOR))
     # 更新sprites状态
     test.update(events)
-    p.update(events)
     e.update(events)
+    p.update(events)
     wall.update(events)
     # 绘制sprites
     test.draw(screen)
-    p.draw(screen)
     e.draw(screen)
+    p.draw(screen)
     wall.draw(screen)
     # 更新画布
     pygame.display.flip()
