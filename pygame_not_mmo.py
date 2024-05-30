@@ -43,6 +43,7 @@ VSIZE = Vector2(*SIZE)
 # BACKGROUND_COLOR = 153, 255, 153
 BACKGROUND_COLOR = 255, 255, 255
 BLACK = 0, 0, 0
+GRAY = 127, 127, 127
 ALMOST_BLACK = 1, 1, 1
 WHITE = 255, 255, 255
 RED = 255, 0, 0
@@ -111,6 +112,18 @@ class Arrow(pygame.sprite.Sprite):
             self.kill()
 
 
+# TODO 近战弹道
+class Sword(pygame.sprite.Sprite):
+    def __init__(self, pos: Vector2, combo: int, *groups) -> None:
+        super().__init__(*groups)
+        self.pos = pos
+        self.length = WIDTH // 20
+        self.image = pygame.Surface(VSIZE // 10)
+        self.image.set_colorkey(BLACK)
+        self.rect = self.image.get_rect(center=self.pos)
+        pygame.draw.line(self.image, GRAY, self.pos, 8)
+
+
 class Wall(pygame.sprite.Sprite):
     def __init__(self, start: Tuple[int, int], end: Tuple[int, int], *groups) -> None:
         super().__init__(*groups)
@@ -119,7 +132,6 @@ class Wall(pygame.sprite.Sprite):
         del_x, del_y = abs(start.x - end.x), abs(start.y - end.y)
         width: int = (((round(del_x) + 5) >> 1) << 1) + 1
         height: int = (((round(del_y) + 5) >> 1) << 1) + 1
-        print(width, height)
         self.image = pygame.Surface([width, height])
         self.image.set_colorkey(BLACK)
         self.center = (start + end) / 2
@@ -162,6 +174,9 @@ class Addon(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
         pygame.draw.circle(self.image, YELLOW, [20, 20], 20)
         self.mask = pygame.mask.from_surface(self.image)
+        self.hp = 4
+
+        self.active = False
 
 
 class Obstacles(pygame.sprite.Sprite):
@@ -181,7 +196,7 @@ class Obstacles(pygame.sprite.Sprite):
         elif self.move_to == -1 and self.x < 0:
             self.move_to = 1
         self.x += self.move_to
-        self.rect.center = (self.x, HEIGHT//2)
+        self.rect.center = (self.x, HEIGHT // 2)
 
 
 class Obstacles2(pygame.sprite.Sprite):
@@ -190,7 +205,7 @@ class Obstacles2(pygame.sprite.Sprite):
         self.y = 0
         self.image = pygame.Surface([WIDTH, 5])
         self.image.set_colorkey(BLACK)
-        self.rect = self.image.get_rect(center=(WIDTH//2, self.y))
+        self.rect = self.image.get_rect(center=(WIDTH // 2, self.y))
         pygame.draw.line(self.image, ALMOST_BLACK, (0, 3), (WIDTH, 3))
         self.mask = pygame.mask.from_surface(self.image)
         self.move_to = 1
