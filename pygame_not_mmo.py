@@ -82,10 +82,10 @@ class Boss(pygame.sprite.Sprite):
 
 
 class Arrow(pygame.sprite.Sprite):
-    def __init__(self, pos: Vector2, vect: Vector2, power: float, *groups) -> None:
+    def __init__(self, pos: Vector2, power: float, *groups) -> None:
         super().__init__(*groups)
         self.pos = Vector2(pos)
-        self.vect = Vector2(vect)
+        self.vect = pygame.mouse.get_pos() - self.pos
         self.pow = power
         self.img_center = VSIZE // 10
         self.image = pygame.Surface(self.img_center)
@@ -100,7 +100,7 @@ class Arrow(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
 
     def update(self, game_events):
-        self.pos += self.vect.normalize()
+        self.pos += self.vect.normalize() * 2
         self.rect.center = self.pos
         # TODO 弓箭的射程？
         if (
@@ -113,15 +113,41 @@ class Arrow(pygame.sprite.Sprite):
 
 
 # TODO 近战弹道
+# Combo -> 0：逆时针横扫，1：顺时针横扫，2：直刺。
 class Sword(pygame.sprite.Sprite):
-    def __init__(self, pos: Vector2, combo: int, *groups) -> None:
+    def __init__(
+        self, pos: Vector2, combo: Literal[0, 1, 2], duration: int, *groups
+    ) -> None:
         super().__init__(*groups)
-        self.pos = pos
+        self.player_pos = (
+            pos  # 不封装Vector2会导致player_pos同步玩家位置，这正是我想要的。
+        )
+        self.pos = Vector2(pos)
         self.length = WIDTH // 20
         self.image = pygame.Surface(VSIZE // 10)
         self.image.set_colorkey(BLACK)
         self.rect = self.image.get_rect(center=self.pos)
-        pygame.draw.line(self.image, GRAY, self.pos, 8)
+        self.mouse_pos_when_trigger = Vector2(pygame.mouse.get_pos())
+        self.vect = self.mouse_pos_when_trigger.angle_to(self.pos)
+        print(self.vect)
+        self.combo = combo
+        self.duration = duration
+        self.init_time = pygame.time.get_ticks()
+
+    def update(self, game_events):
+        time_passed = pygame.time.get_ticks() - self.init_time
+        progress = time_passed / self.duration
+        if progress >= 1:
+            self.kill()
+        self.image.fill(BLACK)
+        self.rect.center = self.player_pos
+        match self.combo:
+            case 0:
+                pygame.draw.line(self.image, GRAY, VSIZE // 20, self.pos, 8)
+            case 1:
+                pygame.draw.line(self.image, GRAY, self.pos, Vector2(0, 0), 8)
+            case 2:
+                pygame.draw.line(self.image, GRAY, self.pos, Vector2(0, 0), 8)
 
 
 class Wall(pygame.sprite.Sprite):
@@ -241,13 +267,19 @@ class Player(pygame.sprite.Sprite):
         self.start_draw = 0
         self.dashed = False
         self.last_dash = 0
+        self.on_melee = False
+        self.on_combo = 0
 
     def _player_control(self):
         left = pygame.key.get_pressed()[pygame.K_a]
         up = pygame.key.get_pressed()[pygame.K_w]
         down = pygame.key.get_pressed()[pygame.K_s]
         right = pygame.key.get_pressed()[pygame.K_d]
-        speed_boost = 1 if self.drawing_bow else 2
+        speed_boost = 2
+        if self.drawing_bow:
+            speed_boost = 1
+        elif self.on_melee:
+            speed_boost = 0.5
         global_boost = WIDTH / 400
         del_x = right - left
         del_y = down - up
@@ -285,7 +317,7 @@ class Player(pygame.sprite.Sprite):
             self.kill()
         if pygame.sprite.spritecollide(self, wall, False, pygame.sprite.collide_mask):
             self.render()
-            self.hp -= 2
+            self.hp -= 0
         # TODO 受击后无敌0.5秒?
 
         # 射击能力
@@ -299,10 +331,13 @@ class Player(pygame.sprite.Sprite):
             self.drawing_bow = False
             x = min(1.0, drawing_time / 1000)
             bow_power = 1 - math.sqrt(1 - x**2)  # TODO 弓箭威力算法
-            Arrow(self.pos, pygame.mouse.get_pos() - self.pos, bow_power, test)
+            Arrow(self.pos, bow_power, test)
 
         # 近战能力
         # TODO 左键近战
+        if not self.on_melee and pygame.mouse.get_pressed(3)[0]:
+            self.on_melee = True
+            Sword(self.pos, self.on_combo, 800, test)
 
         # 闪避能力：
         next_move = self._player_control()
@@ -333,9 +368,18 @@ class Enemy(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
         self.mask = pygame.mask.from_surface(self.image)
         self.hp = 10
+        self.count = 0
+        self.move_sppeed = Vector2(1, 0)
 
     def update(self, game_events) -> None:
         hits = pygame.sprite.spritecollide(self, test, True, pygame.sprite.collide_mask)
+        if self.count < 100:
+            self.pos += self.move_sppeed
+            self.count += 1
+        else:
+            self.move_sppeed = -self.move_sppeed
+            self.count = 0
+        self.rect.center = self.pos
         for hit in hits:
             self.hp -= hit.pow
             self.hp = round(self.hp, 3)
