@@ -72,6 +72,7 @@ class Boss(pygame.sprite.Sprite):
 
         self.init_time = pygame.time.get_ticks()
 
+        self.hp = 1000
         self.stage = 1
 
         self.count_down_started = False
@@ -79,6 +80,10 @@ class Boss(pygame.sprite.Sprite):
 
         self.bullet_interval = 500
         self.last_bullet = self.init_time
+        self.bullet_init_angle = 180
+        self.bullet_init_angle_step = 6
+        self.bullet_angle_acc = 0.5
+
         self.shock_wave_interval = 3000
         self.last_shock_wave = self.init_time
 
@@ -97,17 +102,35 @@ class Boss(pygame.sprite.Sprite):
     def update(self, game_events) -> None:
         current_time = pygame.time.get_ticks()
 
+        if hits := pygame.sprite.spritecollide(
+            self, player_bullet, True, pygame.sprite.collide_mask
+        ):
+            for hit in hits:
+                self.hp -= hit.pow
+        if hits := pygame.sprite.spritecollide(
+            self, player_non_bullet, False, pygame.sprite.collide_mask
+        ):
+            for hit in hits:
+                self.hp -= hit.pow
+
         for add in self.addons:
             self.addon_status[add.pos_id] = add.active
             add.recover_time = 25000 - 2000 * len(self.walls)
 
+        if not any(self.addon_status.values()):
+            random.choice(self.walls.sprites()).kill()
+            for add in self.addons:
+                add.reset()
+
         if current_time - self.last_bullet > self.bullet_interval:
             self.last_bullet = current_time
-            random_angle = random.randint(0, 360)
+            self.bullet_init_angle_step += self.bullet_angle_acc
+            self.bullet_init_angle += self.bullet_init_angle_step
+            angle = random.random() * 360
             for i in range(6):
                 Lightblot(
                     self.pos,
-                    Vector2(-1, 0).rotate((random_angle + i * 60) % 360),
+                    Vector2(-1, 0).rotate((angle + i * 60) % 360),
                     enemy_bullet,
                 )
         if current_time - self.last_shock_wave > self.shock_wave_interval:
@@ -147,6 +170,10 @@ class Lightblot(pygame.sprite.Sprite):
     def update(self, game_events):
         self.pos += self.direction.normalize()
         self.rect.center = self.pos
+        if self.pos.x < -WIDTH / 2 or self.pos.x > WIDTH * 1.5:
+            self.kill()
+        if self.pos.y < -WIDTH / 2 or self.pos.y > HEIGHT * 1.5:
+            self.kill()
 
 
 class Shockwave(pygame.sprite.Sprite):
@@ -343,6 +370,11 @@ class Addon(pygame.sprite.Sprite):
     def force_kill(self):
         self.kill()
 
+    def reset(self):
+        self.render(YELLOW)
+        self.active = True
+        self.hp = self.max_hp
+
     def update(self, game_events):
         # if self.nodes:
         if hits := pygame.sprite.spritecollide(
@@ -364,9 +396,7 @@ class Addon(pygame.sprite.Sprite):
             not self.active
             and current_time - self.last_time_not_active > self.recover_time
         ):
-            self.render(YELLOW)
-            self.active = True
-            self.hp = self.max_hp
+            self.reset()
 
 
 class Player(pygame.sprite.Sprite):
@@ -485,7 +515,7 @@ class Player(pygame.sprite.Sprite):
             self.drawing_bow = False
             x = min(1.0, drawing_time / 1000)
             bow_power = 1 - math.sqrt(1 - x**2)  # TODO 弓箭威力算法
-            Arrow(self.pos, bow_power, player_bullet)
+            Arrow(self.pos, bow_power + 9999, player_bullet)  # TODO 测试用数据
 
         # 近战能力
         # TODO 左键近战，未完成的内容：攻击间隔，combo允许间隔
