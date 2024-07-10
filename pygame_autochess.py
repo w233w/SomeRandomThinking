@@ -6,6 +6,7 @@ from itertools import count
 from enum import IntEnum
 
 # 自走棋
+# unfinished
 
 SCREEN_WIDTH = SCREEN_HEIGHT = 400
 SCREEN_SIZE = SCREEN_WIDTH, SCREEN_HEIGHT
@@ -31,7 +32,7 @@ class Team(IntEnum):
 class Unit(pygame.sprite.Sprite):
     id_gen = count()
 
-    def __init__(self, pos, hp, speed, team, *groups) -> None:
+    def __init__(self, pos, hp, speed, color, team, *groups) -> None:
         super().__init__(*groups)
         self.id = next(Unit.id_gen)
         self.r = 10
@@ -41,10 +42,7 @@ class Unit(pygame.sprite.Sprite):
         self.pos = pygame.Vector2(pos)
         self.rect = self.image.get_rect(center=self.pos)
 
-        pygame.draw.circle(self.image, RED, self.size // 2, self.size[0] // 2)
-        self.mask = pygame.mask.from_surface(self.image)
-
-        self.hp = hp
+        self.hp = self.max_hp = hp
         self.speed = speed
         self.team: Team = team
 
@@ -54,6 +52,8 @@ class Unit(pygame.sprite.Sprite):
 
         self.init_time = 0
 
+        self.render(color)
+
     @property
     def oppoment_team(self):
         return Team(-self.team)
@@ -62,13 +62,25 @@ class Unit(pygame.sprite.Sprite):
     def die(self):
         return self.hp <= 0
 
+    def render(self, color):
+        self.image.fill(BLACK)
+        pygame.draw.circle(self.image, color, self.size // 2, self.size[0] // 2)
+        self.mask = pygame.mask.from_surface(self.image)
+        pygame.draw.circle(
+            self.image,
+            RED if self.team == 1 else ALMOST_BLACK,
+            self.size // 2,
+            self.size[0] // 2,
+            1,
+        )
+
     def ready(self):
         self.placed = True
         self.init_time = pygame.time.get_ticks()
 
     def on_hit(self):  # 受击判定
         if hits := pygame.sprite.spritecollide(
-            self, assist_groups[Team(-self.team)], True, pygame.sprite.collide_mask
+            self, assist_groups[self.oppoment_team], True, pygame.sprite.collide_mask
         ):
             for hit in hits:
                 self.hp -= hit.pow
@@ -110,11 +122,11 @@ class Unit(pygame.sprite.Sprite):
 
 class Arrow(pygame.sprite.Sprite):
     def __init__(
-        self, pos: pygame.Vector2, dist: pygame.Vector2, power: float, *groups
+        self, pos: pygame.Vector2, dest: pygame.Vector2, power: float, *groups
     ) -> None:
         super().__init__(*groups)
         self.pos = pygame.Vector2(pos)
-        self.vect = dist - self.pos
+        self.vect = dest - self.pos
         while self.vect.length() == 0:
             self.vect = pygame.Vector2(
                 random.randint(-999, 999), random.randint(-999, 999)
@@ -153,6 +165,8 @@ class Damage_spot(pygame.sprite.Sprite):
         self.image = pygame.Surface([1, 1])
         self.image.set_colorkey(BLACK)
         self.image.fill(ALMOST_BLACK)
+        self.mask = pygame.mask.from_surface(self.image)
+        self.image.fill(BLACK)
         self.rect = self.image.get_rect(center=self.pos)
         self.init_time = pygame.time.get_ticks()
 
@@ -163,8 +177,7 @@ class Damage_spot(pygame.sprite.Sprite):
 
 class Archer(Unit):
     def __init__(self, pos, team, *groups) -> None:
-        super().__init__(pos, 20, 1.8, team, *groups)
-        pygame.draw.circle(self.image, YELLOW, self.size // 2, self.size[0] // 2)
+        super().__init__(pos, 20, 1.5, YELLOW, team, *groups)
         self.target: Unit = None
         self.targeting_range = 400
         self.shoot_interval = 1000
@@ -174,19 +187,15 @@ class Archer(Unit):
         self.last_shoot = self.init_time
 
     def targeting(self):
-        if self.target is None:
-            target, dis = None, float("inf")
-            for sp in army_groups[self.oppoment_team]:
-                if (
-                    self.pos.distance_to(sp.pos) < self.targeting_range
-                    and self.pos.distance_to(sp.pos) <= dis
-                ):
-                    target = sp
-                    dis = self.pos.distance_to(sp.pos)
-            self.target = target
-        else:
-            if self.target.die:
-                self.target = None
+        target, dis = None, float("inf")
+        for sp in army_groups[self.oppoment_team]:
+            if (
+                self.pos.distance_to(sp.pos) < self.targeting_range
+                and self.pos.distance_to(sp.pos) <= dis
+            ):
+                target = sp
+                dis = self.pos.distance_to(sp.pos)
+        self.target = target
 
     def moving(self):
         if self.target is None:
@@ -202,8 +211,7 @@ class Archer(Unit):
 
 class Knight(Unit):
     def __init__(self, pos, team, *groups) -> None:
-        super().__init__(pos, 60, 1.2, team, *groups)
-        pygame.draw.circle(self.image, BLUE, self.size // 2, self.size[0] // 2)
+        super().__init__(pos, 60, 1.2, BLUE, team, *groups)
         self.target: Unit = None
         self.targeting_range = 200
         self.hit_interval = 400
@@ -234,7 +242,10 @@ class Knight(Unit):
         if self.target is None:
             self.pos += pygame.Vector2(0, self.team) * self.speed
         else:
-            self.pos += (self.target.pos - self.pos).normalize() * self.speed
+            delta_pos = self.target.pos - self.pos
+            if delta_pos.length() < self.r * 2:
+                return
+            self.pos += delta_pos.normalize() * self.speed
         self.rect.center = self.pos
 
     def action(self):
@@ -243,13 +254,13 @@ class Knight(Unit):
                 pygame.time.get_ticks() - self.last_hit > self.hit_interval
                 and self.pos.distance_to(self.target.pos) <= 2 * self.r
             ):
-                Damage_spot(self.target.pos, 20, assist_groups[self.team])
+                Damage_spot(self.target.pos, 10, assist_groups[self.team])
+                self.last_hit = pygame.time.get_ticks()
 
 
 class Rider(Unit):
     def __init__(self, pos, team, *groups) -> None:
-        super().__init__(pos, 35, 1, team, *groups)
-        pygame.draw.circle(self.image, RED, self.size // 2, self.size[0] // 2)
+        super().__init__(pos, 35, 2, RED, team, *groups)
         self.target: Unit = None
         self.face_to = pygame.Vector2(0, self.team)
         self.max_turning_angle = 150
@@ -269,24 +280,27 @@ class Rider(Unit):
             if self.target.die:
                 self.target = None
         else:
-            target, hp = None, float("inf")
+            target, dis = None, -1
             for sp in army_groups[self.oppoment_team]:
-                if sp.hp <= hp:
+                if self.pos.distance_to(sp.pos) >= dis:
                     target = sp
-                    hp = self.pos.distance_to(sp.pos)
+                    dis = self.pos.distance_to(sp.pos)
             self.target = target
 
     def moving(self):
+        self.image.fill(BLACK)
+        pygame.draw.circle(self.image, RED, self.size // 2, self.size[0] // 2)
         if self.target is not None:
             if (
                 not self.charging
-                and pygame.time.get_ticks() - self.last_charging > 5000
+                and pygame.time.get_ticks() - self.last_charging > 4000
             ):
+                self.targeting()
                 self.charging = True
                 self.last_charging = pygame.time.get_ticks()
             if self.charging and pygame.time.get_ticks() - self.last_charging > 3000:
                 self.charging = False
-                self.speed = 1
+                self.speed = 2
             if self.charging:
                 self.speed = min(self.speed + self.acc, self.max_speed)
 
@@ -300,24 +314,43 @@ class Rider(Unit):
             elif 360 - self.max_turning_angle < delta_angle:
                 shift = delta_angle - 360
             rotate_speed = (self.angle_speed, -self.angle_speed)[shift <= 0]
-            real_move_to = self.face_to.rotate(rotate_speed)
-            self.pos += real_move_to.normalize() * self.speed
+            move_to = self.face_to.rotate(rotate_speed)
+
+            # edge detect
+            to_edge_x = min(abs(self.pos.x), abs(self.pos.x - SCREEN_WIDTH))
+            to_edge_y = min(abs(self.pos.y), abs(self.pos.y - SCREEN_HEIGHT))
+            if to_edge_x < SCREEN_WIDTH // 10 or to_edge_y < SCREEN_HEIGHT // 10:
+                self.charging = False
+                self.speed = 2
+            real_move_to = move_to.normalize()
+            self.pos += real_move_to * self.speed
             self.face_to = real_move_to
         else:
-            self.pos += pygame.Vector2(0, self.team) * self.speed
-            self.face_to = pygame.Vector2(0, self.team)
+            self.pos += self.face_to * self.speed
+        pygame.draw.line(
+            self.image,
+            ALMOST_BLACK,
+            self.size // 2,
+            self.size // 2 + self.face_to * 100,
+        )
         self.rect.center = self.pos
 
     def action(self):
-        if self.target is not None:
-            if self.pos.distance_to(self.target.pos) <= 2 * self.r:
-                Damage_spot(self.target.pos, 20, assist_groups[self.team])
+        if hits := pygame.sprite.spritecollide(
+            self, army_groups[self.oppoment_team], False, pygame.sprite.collide_mask
+        ):
+            for sp in hits:
+                Damage_spot(
+                    sp.pos,
+                    2 if self.speed > 3 else 1,
+                    assist_groups[self.team],
+                )
 
 
 class LightRider(Rider):
     def __init__(self, pos, team, *groups) -> None:
         super().__init__(pos, team, *groups)
-        pygame.draw.circle(self.image, LIGHT_RED, self.size // 2, self.size[0] // 2)
+        self.render(LIGHT_RED)
         self.hp = 25
         self.max_speed = 4
         self.acc = 1.8 / FPS
@@ -332,15 +365,23 @@ pygame.init()
 
 army_groups = {Team.Team1: pygame.sprite.Group(), Team.Team2: pygame.sprite.Group()}
 assist_groups = {Team.Team1: pygame.sprite.Group(), Team.Team2: pygame.sprite.Group()}
-Archer([50, 300], Team.Team1, army_groups[Team.Team1])
-Archer([150, 300], Team.Team1, army_groups[Team.Team1])
-Archer([200, 300], Team.Team1, army_groups[Team.Team1])
-Archer([250, 300], Team.Team1, army_groups[Team.Team1])
-Archer([300, 300], Team.Team1, army_groups[Team.Team1])
-Knight([200, 250], Team.Team1, army_groups[Team.Team1])
+for i in range(7):
+    Archer([50 + i * 50, 300], Team.Team1, army_groups[Team.Team1])
+for i in range(6):
+    Archer([75 + i * 50, 330], Team.Team1, army_groups[Team.Team1])
+for i in range(3):
+    Knight([100 + 100 * i, 250], Team.Team1, army_groups[Team.Team1])
+
 Knight([200, 100], Team.Team2, army_groups[Team.Team2])
-LightRider([100, 100], Team.Team2, army_groups[Team.Team2])
-Rider([150, 100], Team.Team2, army_groups[Team.Team2])
+Knight([250, 100], Team.Team2, army_groups[Team.Team2])
+Knight([230, 100], Team.Team2, army_groups[Team.Team2])
+Rider([50, 50], Team.Team2, army_groups[Team.Team2])
+Rider([100, 50], Team.Team2, army_groups[Team.Team2])
+Rider([150, 50], Team.Team2, army_groups[Team.Team2])
+Rider([200, 50], Team.Team2, army_groups[Team.Team2])
+Rider([250, 50], Team.Team2, army_groups[Team.Team2])
+Rider([300, 50], Team.Team2, army_groups[Team.Team2])
+Rider([350, 50], Team.Team2, army_groups[Team.Team2])
 
 while True:
     clock.tick(FPS)
