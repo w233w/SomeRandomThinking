@@ -44,7 +44,7 @@ class Blob(pygame.sprite.Sprite):
         pygame.draw.circle(self.image, SKYBLUE, self.size // 2, self.real_r)
         self.image.blit(fill_info, [20 - text_size[0] / 2, 20 - text_size[1] / 2])
 
-    def on_click(self, events: list[pygame.Event]):
+    def on_click(self, events: list[pygame.event]):
         global available_click
         if available_click <= 0:
             return
@@ -63,7 +63,7 @@ class Blob(pygame.sprite.Sprite):
         for direction in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
             Split(self.pos, direction, split_group)
 
-    def update(self, events: list[pygame.Event]):
+    def update(self, events: list[pygame.event]):
         self.on_click(events)
         self.on_split()
         if self.fill >= self.max_fill:
