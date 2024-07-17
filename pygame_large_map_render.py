@@ -2,13 +2,9 @@ import pygame
 import quads
 import math
 import random
-from copy import deepcopy
 from itertools import product
 from statistics import mean
 from collections import defaultdict
-
-# free move on large map, render building by z-index.
-# only render building captured by camera.
 
 SCREEN_WIDTH = SCREEN_HEIGHT = 400
 SCREEN_SIZE = SCREEN_WIDTH, SCREEN_HEIGHT
@@ -16,10 +12,8 @@ MAP_WIDTH = MAP_HEIGHT = 1000
 MAP_SIZE = MAP_WIDTH, MAP_HEIGHT
 
 FPS = 60
-
 BLACK = 0, 0, 0
 ALMOST_BLACK = 1, 1, 1
-COLOR = 29, 31, 211
 WHITE = 255, 255, 255
 RED = 255, 0, 0
 BLUE = 0, 0, 255
@@ -27,6 +21,9 @@ YELLOW = 255, 255, 0
 GREEN = 0, 255, 0
 
 Qtree = quads.QuadTree(list(pygame.Vector2(MAP_SIZE) // 2), MAP_WIDTH, MAP_HEIGHT)
+
+# 大量敌人，有限大小地图，可探索。敌人每一段时间增强，玩家击败敌人不断获得资源。
+# 玩家死亡后才能消费资源。资源可以提供下一局甚至全局能力。
 
 
 class Building(pygame.sprite.Sprite):
@@ -88,7 +85,6 @@ class Camera(pygame.sprite.Sprite):
         self.pos = pygame.Vector2(500, 500)
         self.image = pygame.Surface([20, 20])
         self.image.set_colorkey(BLACK)
-        self.image.fill(WHITE)
         self.rect = self.image.get_rect(center=self.size // 2)
 
     def update(self) -> None:
@@ -115,38 +111,74 @@ class Menu(pygame.sprite.Sprite):
         self.image = pygame.Surface([380, 380])
         self.image.set_colorkey(BLACK)
         self.image.fill(ALMOST_BLACK)
-        self.image.set_alpha(80)
+        self.image.set_alpha(180)
         self.rect = self.image.get_rect(center=self.size // 2)
 
-    def update(self) -> None:
-        pass
 
+class Interactive(pygame.sprite.Sprite):
+    def __init__(self, rect: pygame.Rect, *groups) -> None:
+        super().__init__(*groups)
+        self.size = rect.size
+        self.image = pygame.Surface(self.size)
+        self.image.set_colorkey(BLACK)
+        self.rect = rect
+        self.hover = False
+        
+    def update(self, events):
+        for event in events:
+            if event.type == pygame.MOUSEMOTION:
+                if not self.hover and self.rect.collidepoint(event.dict["pos"]):
+                    self.hover = True
+                    pygame.mouse.set_cursor(pygame.Cursor(pygame.SYSTEM_CURSOR_HAND))
+                elif self.hover and not self.rect.collidepoint(event.dict["pos"]):
+                    self.hover = False
+                    pygame.mouse.set_cursor(pygame.Cursor(pygame.SYSTEM_CURSOR_ARROW))
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if self.rect.collidepoint(event.dict["pos"]):
+                    if event.dict["button"] == 1:
+                        self.command()
 
+class Button(Interactive):
+    def __init__(
+        self, rect: pygame.Rect, text: str, command: callable, *groups
+    ) -> None:
+        super().__init__(rect, *groups)
+        self.image.fill(WHITE)
+        self.text = text
+        self.command: callable = command
+        self.font = pygame.font.SysFont("simhei", 20)
+        text_size = self.font.size(self.text)
+        text_render = self.font.render(self.text, True, ALMOST_BLACK, None)
+        self.image.blit(
+            text_render,
+            [self.size[0] / 2 - text_size[0] / 2, self.size[1] / 2 - text_size[1] / 2],
+        )
+        
 screen = pygame.display.set_mode(SCREEN_SIZE)
 pygame.display.set_caption("测试")
 clock = pygame.time.Clock()
 pygame.init()
 
-background = pygame.sprite.Group()
-Building([500, 500], BLUE, (250, 250), 1, background)
-Building([500, 500], YELLOW, (750, 250), 1, background)
-Building([500, 500], RED, (250, 750), 1, background)
-Building([500, 500], GREEN, (750, 750), 1, background)
-for i in range(100):
+buildings = pygame.sprite.Group()
+Building([500, 500], BLUE, (250, 250), 1, buildings)
+Building([500, 500], YELLOW, (750, 250), 1, buildings)
+Building([500, 500], RED, (250, 750), 1, buildings)
+Building([500, 500], GREEN, (750, 750), 1, buildings)
+for i in range(1000):
     Building(
         [10, 10],
         ALMOST_BLACK,
         (random.randint(10, 990), random.randint(10, 990)),
         2,
-        background,
+        buildings,
     )
-for i in range(100):
+for i in range(1000):
     Building(
-        [30, 30],
-        COLOR,
+        [15, 15],
+        WHITE,
         (random.randint(30, 970), random.randint(30, 970)),
         3,
-        background,
+        buildings,
     )
 
 camera = pygame.sprite.GroupSingle()
@@ -157,13 +189,29 @@ smooth_fps = [FPS] * 10
 drawing_building_by_z = defaultdict(lambda: pygame.sprite.Group())
 
 pause = False
+running = True
 
 pause_menu = pygame.sprite.GroupSingle()
 Menu(pause_menu)
 mimic = None
+menu_buttons = pygame.sprite.Group()
 
 
-while True:
+def depause():
+    global pause
+    pause = False
+
+
+def stop_running():
+    global running
+    running = False
+
+
+Button(pygame.Rect(50, 350, 80, 30), "继续", depause, menu_buttons)
+Button(pygame.Rect(160, 350, 80, 30), "保存", print, menu_buttons)
+Button(pygame.Rect(270, 350, 80, 30), "结束", stop_running, menu_buttons)
+
+while running:
     clock.tick(FPS)
     delay = 1000 / clock.get_time()
     smooth_fps.append(delay)
@@ -173,28 +221,31 @@ while True:
     events = pygame.event.get()
     for event in events:
         if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
+            running = False
         elif event.type == pygame.KEYDOWN:
-            if event.dict["key"] == pygame.K_q:
+            if event.dict["key"] in [pygame.K_q, pygame.K_ESCAPE]:
                 pause = not pause
 
     # pause
     if pause:
         if mimic is None:
-            mimic = deepcopy(screen)
+            mimic = screen.copy()
         screen.fill(WHITE)
         screen.blit(mimic, mimic.get_rect())
         pause_menu.update()
+        menu_buttons.update(events)
         pause_menu.draw(screen)
+        menu_buttons.draw(screen)
         pygame.display.flip()
         continue
     else:
+        if mimic is not None:
+            pygame.mouse.set_cursor(pygame.Cursor(pygame.SYSTEM_CURSOR_ARROW))
         mimic = None
 
     screen.fill(WHITE)
     camera.update()
-    background.update()
+    buildings.update()
 
     bb = quads.BoundingBox(
         C.pos.x - SCREEN_WIDTH / 2,
@@ -215,3 +266,5 @@ while True:
     camera.draw(screen)
 
     pygame.display.flip()
+
+pygame.quit()
