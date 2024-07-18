@@ -1,4 +1,4 @@
-from typing import Tuple, Literal, Self
+from typing import Tuple, Literal
 import pygame
 from pygame import Vector2
 from statistics import mean
@@ -60,7 +60,8 @@ YELLOW = 255, 255, 0
 PINK = 255, 127, 127
 ORANGE = 255, 127, 0
 
-PLAYER_POS_EVENT = pygame.event.custom_type()
+PLAYER_POS_BOARDCAST = pygame.event.custom_type()
+RELOAD_DONE_EVENT = pygame.event.custom_type()
 
 
 class Unit(pygame.sprite.Sprite):
@@ -78,11 +79,15 @@ class Unit(pygame.sprite.Sprite):
         self.shield_on = False
         self.shield_remain = 0
 
+        self.hp = 0
+
     def shield(self, val):
         self.shield_on = True
         self.shield_remain = float(val)
 
     def update(self, game_events):
+        if self.hp <= 0:
+            self.kill()
         if self.shield_on and self.shield_remain <= 0:
             self.shield_on = False
 
@@ -138,17 +143,17 @@ class Shockwave(pygame.sprite.Sprite):
 
     def update(self, game_events) -> None:
         current_time = pygame.time.get_ticks() - self.init_time
-        if current_time > 800:
+        if current_time > 500:
             self.kill()
             return
         self.image.fill(BLACK)
-        r = self.radius * current_time / 800
+        r = self.radius * current_time / 500
         pygame.draw.circle(
             self.image,
             BLUE,
             [self.radius, self.radius],
             r,
-            max(1, 12 - round(12 * current_time / 800)),
+            max(1, 12 - round(12 * current_time / 500)),
         )
         self.mask = pygame.mask.from_surface(self.image)
 
@@ -156,13 +161,15 @@ class Shockwave(pygame.sprite.Sprite):
 class Addon_A(Unit):
     def __init__(self, pos, size, *groups) -> None:
         super().__init__(pos, size, *groups)
+        self.hp = 1
         pygame.draw.circle(self.image, ALMOST_BLACK, self.size // 2, self.radius)
 
     def update(self, game_events):
+        super().update(game_events)
         if pygame.time.get_ticks() - self.init_time > 1000:
             for event in game_events:
-                if event.type == PLAYER_POS_EVENT:
-                    print(event.dict["pos"])
+                if event.type == PLAYER_POS_BOARDCAST:
+                    Laser(self.pos, event.dict["pos"], 3, enemy_non_bullet)
                     self.kill()
 
 
@@ -172,11 +179,10 @@ class Addon_B(Unit):
 
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, pos, dist, *groups) -> None:
+    def __init__(self, pos, vect, *groups) -> None:
         super().__init__(*groups)
         self.pos = pygame.Vector2(pos)
-        self.dist = pygame.Vector2(dist)
-        self.vect = (self.dist - self.pos).normalize()
+        self.vect = pygame.Vector2(vect).normalize()
         self.size = pygame.Vector2(WSIZE // 200)
         self.image = pygame.Surface(self.size)
         self.image.set_colorkey(BLACK)
@@ -184,7 +190,7 @@ class Bullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
 
     def update(self, game_events) -> None:
-        self.pos += self.vect * 4
+        self.pos += self.vect * 5
         self.rect.center = self.pos
 
 
@@ -197,35 +203,62 @@ class Weapon:
         power: int,
         shoot_interval: int,
         reload_time: int,
+        shotgun_bullets: int = 6,
     ) -> None:
         self.wtype = wtype
         self.wclass = wclass
         self.loaded = self.max_load = ammo
-        self.full_ammo = self.max_load * 12
         self.pow = power
         self.shoot_interval = shoot_interval
         self.reload_time = reload_time
+        self.shotgun_bullets = shotgun_bullets
 
         self.reloading = False
-
+        self.start_reloading = 0
         self.last_shoot = 0
 
-    def reload(self):
+    @property
+    def need_reload(self):
+        return (not self.reloading) and self.loaded <= 0
+
+    def reload(self, start_time):
         self.reloading = True
-        pass
+        self.start_reloading = start_time
 
-    def can_shoot(self, current_time):
-        return (
-            not self.reloading and current_time - self.last_shoot >= self.shoot_interval
-        )
+    def check_reload(self, current_time):
+        if current_time - self.start_reloading >= self.reload_time:
+            pygame.event.post(pygame.Event(RELOAD_DONE_EVENT))
+            if self.wclass == "shotgun":
+                if self.loaded == self.max_load:
+                    self.reloading = False
+                    return
+                self.loaded += 1
+                self.start_reloading = current_time
+            else:
+                self.reloading = False
+                self.loaded = self.max_load
 
-    def shoot(self, init_pos, current_time):
-        mouse_pos = pygame.mouse.get_pos()
-        if self.wclass == "shotgun":
-            pass
-        else:
-            Bullet(init_pos, mouse_pos, player_bullet)
-        self.last_shoot = current_time
+    def stop_reload(self):
+        self.reloading = False
+
+    def shoot(self, init_pos: pygame.Vector2, current_time):
+        if self.reloading and self.wclass != "shotgun":
+            return
+        if self.need_reload:
+            self.reload(current_time)
+        if self.loaded > 0 and current_time - self.last_shoot >= self.shoot_interval:
+            mouse_pos = pygame.Vector2(pygame.mouse.get_pos())
+            vect = mouse_pos - init_pos
+            if self.wclass == "shotgun":
+                self.reloading = False
+                for _ in range(self.shotgun_bullets):
+                    Bullet(
+                        init_pos, vect.rotate(random.random() * 15 - 7.5), player_bullet
+                    )
+            else:
+                Bullet(init_pos, vect, player_bullet)
+            self.loaded -= 1
+            self.last_shoot = current_time
 
 
 class Player(Unit):
@@ -252,11 +285,18 @@ class Player(Unit):
         # 机枪：射击时不能移动，不可移动reload
         # 狙：射击时不能移动，不可移动reload
         self.weapons: dict[int, Weapon] = {
-            0: Weapon("gun", "pistol", 12, 40, 400, 700),
-            1: Weapon("gun", "rifle", 6, 18, 100, 250),
+            1: Weapon("gun", "pistol", 9, 40, 400, 1800),
+            2: Weapon("gun", "rifle", 25, 60, 100, 2700),
+            3: Weapon("gun", "shotgun", 6, 22, 800, 400),
+            4: Weapon("gun", "machinegun", 80, 28, 60, 5000),
         }
-        self.selected_weapon = 0
-        self.last_weapon_switch = self.init_time
+        self.selected_weapon = 1
+        for i in range(self.weapon.loaded):
+            Ammo_Hint(i, self, ammo_hint_group)
+
+    @property
+    def weapon(self):
+        return self.weapons[self.selected_weapon]
 
     def _player_control(self):
         left = pygame.key.get_pressed()[pygame.K_a]
@@ -296,27 +336,17 @@ class Player(Unit):
             hp_text, [self.radius - text_size[0] / 2, self.radius - text_size[1] / 2]
         )
 
-    def switch_weapon(self, current_time, game_events):
-        if current_time - self.last_weapon_switch > 100:
-            for event in game_events:
-                if event.type == pygame.MOUSEWHEEL:
-                    if event.dict["y"] > 0:
-                        self.selected_weapon = (self.selected_weapon + 1) % len(
-                            self.weapons
-                        )
-                        self.last_weapon_switch = current_time
-                    elif event.dict["y"] < 0:
-                        self.selected_weapon = (self.selected_weapon - 1) % len(
-                            self.weapons
-                        )
-                        self.last_weapon_switch = current_time
-                elif event.type == pygame.KEYDOWN:
-                    if (
-                        event.dict["unicode"].isdigit()
-                        and int(event.dict["unicode"]) in self.weapons
-                    ):
-                        self.selected_weapon = int(event.dict["unicode"])
-                        self.last_weapon_switch = current_time
+    def switch_weapon(self, game_events):
+        for event in game_events:
+            if event.type == pygame.KEYDOWN:
+                if (
+                    event.dict["unicode"].isdigit()
+                    and int(event.dict["unicode"]) in self.weapons
+                ):
+                    self.weapon.stop_reload()
+                    self.selected_weapon = int(event.dict["unicode"])
+                    return True
+        return False
 
     def update(self, game_events):
         if self.hp <= 0:
@@ -325,16 +355,32 @@ class Player(Unit):
 
         current_time = pygame.time.get_ticks()
 
-        self.switch_weapon(current_time, game_events)
+        for event in game_events:
+            if event.type == RELOAD_DONE_EVENT:
+                ammo_hint_group.empty()
+                for i in range(self.weapon.loaded):
+                    Ammo_Hint(i, self, ammo_hint_group)
+            if event.type == pygame.KEYDOWN:
+                if event.dict["key"] == pygame.K_r:
+                    self.weapon.reload(current_time)
+
+        weapon_switched = self.switch_weapon(game_events)
+
+        if weapon_switched:
+            ammo_hint_group.empty()
+            for i in range(self.weapon.loaded):
+                Ammo_Hint(i, self, ammo_hint_group)
+        if self.weapon.reloading:
+            self.weapon.check_reload(current_time)
 
         # 处理受伤
-        # TODO 是否需要受击后无敌0.5秒?
         on_hit = False
         if hits := pygame.sprite.spritecollide(
             self, enemy_unit, False, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                self.hp -= hit.pow
+                if hasattr(hit, "pow"):
+                    self.hp -= hit.pow
             on_hit = True
         if hits := pygame.sprite.spritecollide(
             self, enemy_bullet, True, pygame.sprite.collide_mask
@@ -357,11 +403,9 @@ class Player(Unit):
             self.hp += 1
             self.render()
 
-        if (
-            self.weapons[self.selected_weapon].can_shoot(current_time)
-            and pygame.mouse.get_pressed()[0]
-        ):
-            self.weapons[self.selected_weapon].shoot(self.pos, current_time)
+        # 射击
+        if pygame.mouse.get_pressed()[0]:
+            self.weapon.shoot(self.pos, current_time)
 
         # 闪避能力：
         next_move = self._player_control()
@@ -379,7 +423,23 @@ class Player(Unit):
         # 移动能力
         self.pos += next_move
         self.rect.center = self.pos
-        pygame.event.post(pygame.Event(PLAYER_POS_EVENT, {"pos": self.pos}))
+        pygame.event.post(pygame.Event(PLAYER_POS_BOARDCAST, {"pos": self.pos}))
+
+
+class Ammo_Hint(pygame.sprite.Sprite):
+    def __init__(
+        self, index, bounding_player: Player, *groups: pygame.sprite.Group
+    ) -> None:
+        super().__init__(*groups)
+        self.image = pygame.image.load("./aa.png")
+        self.player = bounding_player
+        self.index = index
+        self.pos = pygame.Vector2(10, WIDTH - 10 - 6 * index)  # 右上角
+        self.rect = self.image.get_rect(center=self.pos)
+
+    def update(self):
+        if self.index >= self.player.weapon.loaded:
+            self.kill()
 
 
 # Init pygame & Crate screen
@@ -396,18 +456,21 @@ smooth_fps = [FPS] * 10
 # Obstacles2(wall)
 
 # gruop 设计，由单位来处理子弹信息，是否kill是否受伤等。
-# 我方单位，我方子弹类，我方非子弹类，我方非绘制类
-# 敌方单位，敌方子弹类，敌方非子弹类，敌方非绘制类
+# 我方单位，我方子弹类，我方非子弹类
+# 敌方单位，敌方子弹类，敌方非子弹类
+# 中立非子弹类
 player_unit = pygame.sprite.Group()
 player_bullet = pygame.sprite.Group()
 player_non_bullet = pygame.sprite.Group()
-player_not_draw = pygame.sprite.Group()
 enemy_unit = pygame.sprite.Group()
 enemy_bullet = pygame.sprite.Group()
 enemy_non_bullet = pygame.sprite.Group()
-enemy_not_draw = pygame.sprite.Group()
+neutral_non_bullet = pygame.sprite.Group()
+
+ammo_hint_group = pygame.sprite.Group()
 
 Player(Vector2(200, 380), VSIZE // 20, player_unit)
+Addon_A([100, 100], 20, enemy_unit)
 
 # 主体
 while running := True:
@@ -434,6 +497,7 @@ while running := True:
     enemy_unit.update(events)
     enemy_bullet.update(events)
     enemy_non_bullet.update(events)
+    ammo_hint_group.update()
     # wall.update(events)
     # 绘制sprites
     player_unit.draw(screen)
@@ -442,6 +506,8 @@ while running := True:
     enemy_unit.draw(screen)
     enemy_bullet.draw(screen)
     enemy_non_bullet.draw(screen)
+    ammo_hint_group.draw(screen)
     # wall.draw(screen)
     # 更新画布
     pygame.display.flip()
+
