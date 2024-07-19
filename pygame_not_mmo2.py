@@ -1,11 +1,10 @@
-from typing import Tuple, Literal
+from typing import Tuple, Literal, Self
 import pygame
 from pygame import Vector2
 from statistics import mean
 import math
 import random
 
-# unfinished
 # 准备仿mmo的boss战做机制挑战
 # boss1号，共2阶段
 # boss共6000hp。
@@ -28,6 +27,7 @@ import random
 # boss行为3，向前方按循序发射[10，11，12, 11, 10]颗射弹组成的扇形弹幕。
 # boss行为4，当全部漩涡失能时，自身失能20秒。
 # boss行为5，在自身左右两个召唤add(B)。
+# boss行为6，间隔连续使用两次行为5。
 # add(A)行为1，短暂延迟后向玩家发射激光束，之后自身死亡。
 # add(B)行为1，短暂延迟后与另一个add(B)链接，形成的线会造成伤害。同时向下方匀速移动。
 # 漩涡行为1，出场时获得3层无敌盾。
@@ -43,6 +43,7 @@ import random
 # 漩涡无盾时接触伤害为0，其余时间为秒杀。玩家足够接近漩涡中心时会被传送到漩涡内部。
 # 每个漩涡按照自己的颜色，在其内部每5秒生成一个同色add(D)。当任意漩涡内部超过5个add(D)后。
 # 新生成的add(D)会出现在漩涡外部。并向boss移动。
+
 WIDTH = HEIGHT = WSIZE = 400
 FPS = 60.0
 SIZE = WIDTH, HEIGHT
@@ -76,20 +77,27 @@ class Unit(pygame.sprite.Sprite):
 
         self.init_time = pygame.time.get_ticks()
 
-        self.shield_on = False
-        self.shield_remain = 0
+        self._shield_on = False
+        self.shield_remain: int = 0
 
         self.hp = 0
 
-    def shield(self, val):
-        self.shield_on = True
-        self.shield_remain = float(val)
+    @property
+    def shield_on(self):
+        return self.shield_remain != 0
 
-    def update(self, game_events):
+    # 护盾设计，
+    # 护盾值为正数时是常规护盾，数值即为血量
+    # 护盾值为负数时是无敌盾，
+    def get_shield(self, val: int):
+        self.shield_remain = val
+
+    def die_check(self):
         if self.hp <= 0:
             self.kill()
-        if self.shield_on and self.shield_remain <= 0:
-            self.shield_on = False
+
+    def update(self, game_events):
+        raise NotImplementedError("Can't be called here.")
 
 
 class SP_Bullet:
@@ -99,21 +107,49 @@ class SP_Bullet:
 
 class Boss(Unit):
     def __init__(self, *groups) -> None:
-        super().__init__(VSIZE // 2, VSIZE // 2, *groups)
-        pygame.draw.circle(self.image, ORANGE, self.size // 2, WIDTH // 20)
+        super().__init__(pygame.Vector2(WIDTH // 2, 0), VSIZE // 2, *groups)
+        pygame.draw.circle(self.image, ORANGE, self.size // 2, self.radius)
         self.mask = pygame.mask.from_surface(self.image)
 
-        self.hp = 1000
+        self.hp = 20000
         self.phase = 1
 
-        self.count_down_started = False
-        self.count_down_started_at = 0
+        self.action3_started = False
+        self.action3_starting = 0
+        self.action3_config = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        self.action3_wave = -1
+        self.last_action5 = self.init_time
 
-        self.bullet_interval = 500
-        self.last_bullet = self.init_time
-        self.bullet_init_angle = 180
-        self.bullet_init_angle_step = 6
-        self.bullet_angle_acc = 0.5
+    def action1(self):
+        pass
+
+    def action3(self, current_time):
+        if not self.action3_started:
+            self.action3_started = True
+            self.action3_starting = current_time
+        delta_time = current_time - self.action3_starting
+        wave = delta_time // 1000
+        print(delta_time, wave, self.action3_wave)
+        if wave >= len(self.action3_config) - 1:
+            self.action3_started = False
+        if wave > self.action3_wave:  # 每波间隔
+            self.action3_wave = wave
+            config = self.action3_config[wave]
+            interval = 8
+            total = config * 8
+            start = -(total / 2)
+            for i in range(config):
+                Bullet(
+                    self.pos,
+                    pygame.Vector2(0, 1).rotate(start + (i + 0.5) * interval),
+                    10,
+                    3,
+                    enemy_bullet,
+                )
+
+    def action5(self):
+        a = Addon_B(self.pos, 20, None, enemy_unit)
+        Addon_B(self.pos, 20, a, enemy_unit)
 
     def update(self, game_events) -> None:
         current_time = pygame.time.get_ticks()
@@ -122,12 +158,18 @@ class Boss(Unit):
             self, player_bullet, True, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                self.hp -= hit.pow
+                self.hp -= hit.power
         if hits := pygame.sprite.spritecollide(
             self, player_non_bullet, False, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                self.hp -= hit.pow
+                self.hp -= hit.power
+
+        self.action3(current_time)
+
+        if current_time - self.last_action5 > 1000:
+            self.action5()
+            self.last_action5 = current_time
 
 
 class Shockwave(pygame.sprite.Sprite):
@@ -158,14 +200,68 @@ class Shockwave(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
 
 
+class Laser(pygame.sprite.Sprite):
+    def __init__(self, start, end, power, *groups) -> None:
+        super().__init__(*groups)
+        self.size = VSIZE
+        self.image = pygame.Surface(self.size)
+        self.image.set_colorkey(BLACK)
+        self.rect = self.image.get_rect(center=self.size // 2)
+        self.start = pygame.Vector2(start)
+        self.end = pygame.Vector2(end)
+        self.power = power
+        self.width = 1
+        self.mask = pygame.mask.Mask(self.size)
+        self.init_time = pygame.time.get_ticks()
+
+    def update(self, game_events):
+        current_time = pygame.time.get_ticks()
+        x = (current_time - self.init_time) / 1000
+        if x > 2:
+            self.kill()
+        self.width = 1 + 3**x
+        pygame.draw.line(self.image, RED, self.start, self.end, int(self.width))
+        if self.width >= 3:
+            self.mask = pygame.mask.from_surface(self.image)
+        else:
+            self.mask = pygame.mask.Mask(self.size)
+
+
+class Laser2(pygame.sprite.Sprite):
+    def __init__(self, add1: "Addon_B", add2: "Addon_B", power, *groups) -> None:
+        super().__init__(*groups)
+        self.size = VSIZE
+        self.image = pygame.Surface(self.size)
+        self.image.set_colorkey(BLACK)
+        self.rect = self.image.get_rect(center=self.size // 2)
+        self.add1 = add1
+        self.add2 = add2
+        self.power = power
+        self.width = 1
+        self.mask = pygame.mask.Mask(self.size)
+        self.init_time = pygame.time.get_ticks()
+
+    def update(self, game_events):
+        self.image.fill(BLACK)
+        current_time = pygame.time.get_ticks()
+        x = (current_time - self.init_time) / 1000
+        self.width = min(1 + 3**x, 10)
+        pygame.draw.line(self.image, RED, self.add1.pos, self.add2.pos, int(self.width))
+        if self.width >= 3:
+            self.mask = pygame.mask.from_surface(self.image)
+        else:
+            self.mask = pygame.mask.Mask(self.size)
+
+
 class Addon_A(Unit):
-    def __init__(self, pos, size, *groups) -> None:
+    def __init__(self, pos, size, init_speed, *groups) -> None:
         super().__init__(pos, size, *groups)
         self.hp = 1
+        self.init_speed = init_speed
         pygame.draw.circle(self.image, ALMOST_BLACK, self.size // 2, self.radius)
 
     def update(self, game_events):
-        super().update(game_events)
+        self.die_check()
         if pygame.time.get_ticks() - self.init_time > 1000:
             for event in game_events:
                 if event.type == PLAYER_POS_BOARDCAST:
@@ -174,15 +270,45 @@ class Addon_A(Unit):
 
 
 class Addon_B(Unit):
-    def __init__(self, pos: Vector2, size: Vector2, *groups) -> None:
+    def __init__(
+        self, pos: Vector2, size: Vector2, brother: Self | None, *groups
+    ) -> None:
         super().__init__(pos, size, *groups)
+        self.hp = 1
+        self.get_shield(-1)
+        pygame.draw.circle(self.image, ALMOST_BLACK, self.size // 2, self.radius)
+        self.brother = brother
+        self.shot = False
+        self.start_going_dowm = 0
+        self.speed = 0
+        self.x = 0
+        self.laser = None
+
+    def update(self, game_events):
+        if self.pos.y > 300:
+            if self.laser is not None:
+                self.laser.kill()
+            self.kill()
+        if self.brother is not None and self.pos.x != 0:
+            self.speed = pygame.Vector2(-1, 0)
+        elif self.brother is None and self.pos.x != WIDTH:
+            self.speed = pygame.Vector2(1, 0)
+        else:
+            if not self.shot and self.brother is not None:
+                self.laser = Laser2(self, self.brother, 4, enemy_non_bullet)
+                self.shot = True
+            self.speed = pygame.Vector2(0, 3)
+        self.pos += self.speed
+        self.rect.center = self.pos
 
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, pos, vect, *groups) -> None:
+    def __init__(self, pos, vect, power, speed, *groups) -> None:
         super().__init__(*groups)
         self.pos = pygame.Vector2(pos)
         self.vect = pygame.Vector2(vect).normalize()
+        self.power = power
+        self.speed = speed
         self.size = pygame.Vector2(WSIZE // 200)
         self.image = pygame.Surface(self.size)
         self.image.set_colorkey(BLACK)
@@ -190,7 +316,7 @@ class Bullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
 
     def update(self, game_events) -> None:
-        self.pos += self.vect * 5
+        self.pos += self.vect * self.speed
         self.rect.center = self.pos
 
 
@@ -208,7 +334,7 @@ class Weapon:
         self.wtype = wtype
         self.wclass = wclass
         self.loaded = self.max_load = ammo
-        self.pow = power
+        self.power = power
         self.shoot_interval = shoot_interval
         self.reload_time = reload_time
         self.shotgun_bullets = shotgun_bullets
@@ -253,10 +379,14 @@ class Weapon:
                 self.reloading = False
                 for _ in range(self.shotgun_bullets):
                     Bullet(
-                        init_pos, vect.rotate(random.random() * 15 - 7.5), player_bullet
+                        init_pos,
+                        vect.rotate(random.random() * 15 - 7.5),
+                        self.power,
+                        5,
+                        player_bullet,
                     )
             else:
-                Bullet(init_pos, vect, player_bullet)
+                Bullet(init_pos, vect, self.power, 5, player_bullet)
             self.loaded -= 1
             self.last_shoot = current_time
 
@@ -288,7 +418,7 @@ class Player(Unit):
             1: Weapon("gun", "pistol", 9, 40, 400, 1800),
             2: Weapon("gun", "rifle", 25, 60, 100, 2700),
             3: Weapon("gun", "shotgun", 6, 22, 800, 400),
-            4: Weapon("gun", "machinegun", 80, 28, 60, 5000),
+            4: Weapon("gun", "machinegun", 80, 28, 40, 5000),
         }
         self.selected_weapon = 1
         for i in range(self.weapon.loaded):
@@ -350,6 +480,7 @@ class Player(Unit):
 
     def update(self, game_events):
         if self.hp <= 0:
+            ammo_hint_group.empty()
             Player(Vector2(200, 380), self.size, player_unit)
             self.kill()
 
@@ -379,20 +510,20 @@ class Player(Unit):
             self, enemy_unit, False, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                if hasattr(hit, "pow"):
-                    self.hp -= hit.pow
+                if hasattr(hit, "power"):
+                    self.hp -= hit.power
             on_hit = True
         if hits := pygame.sprite.spritecollide(
             self, enemy_bullet, True, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                self.hp -= hit.pow
+                self.hp -= hit.power
             on_hit = True
         if hits := pygame.sprite.spritecollide(
             self, enemy_non_bullet, False, pygame.sprite.collide_mask
         ):
             for hit in hits:
-                self.hp -= hit.pow
+                self.hp -= hit.power
             on_hit = True
         if on_hit:
             self.render()
@@ -434,7 +565,7 @@ class Ammo_Hint(pygame.sprite.Sprite):
         self.image = pygame.image.load("./aa.png")
         self.player = bounding_player
         self.index = index
-        self.pos = pygame.Vector2(10, WIDTH - 10 - 6 * index)  # 右上角
+        self.pos = pygame.Vector2(10, WIDTH - 10 - 6 * index)
         self.rect = self.image.get_rect(center=self.pos)
 
     def update(self):
@@ -470,8 +601,7 @@ neutral_non_bullet = pygame.sprite.Group()
 ammo_hint_group = pygame.sprite.Group()
 
 Player(Vector2(200, 380), VSIZE // 20, player_unit)
-Addon_A([100, 100], 20, enemy_unit)
-
+Boss(enemy_unit)
 # 主体
 while running := True:
     # 决定游戏刷新率
@@ -510,4 +640,3 @@ while running := True:
     # wall.draw(screen)
     # 更新画布
     pygame.display.flip()
-
