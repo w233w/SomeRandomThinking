@@ -78,6 +78,16 @@ class Building(pygame.sprite.Sprite):
         self.rect.center = new_pos
 
 
+class Player(pygame.sprite.Sprite):
+    def __init__(self, *groups) -> None:
+        super().__init__(*groups)
+        self.size = pygame.Vector2(20)
+        self.pos = pygame.Vector2(500)
+        self.image = pygame.Surface(self.size)
+        self.rect = self.image.get_rect(center=self.pos)
+        self.camera = Camera()
+
+
 class Camera(pygame.sprite.Sprite):
     def __init__(self, *groups) -> None:
         super().__init__(*groups)
@@ -85,6 +95,7 @@ class Camera(pygame.sprite.Sprite):
         self.pos = pygame.Vector2(500, 500)
         self.image = pygame.Surface([20, 20])
         self.image.set_colorkey(BLACK)
+        self.image.fill(GREEN)
         self.rect = self.image.get_rect(center=self.size // 2)
 
     def update(self) -> None:
@@ -99,9 +110,18 @@ class Camera(pygame.sprite.Sprite):
         del_y = down - up
 
         self.pos += 3 * pygame.Vector2(del_x, del_y)
-
         if key_pressed[pygame.K_r]:
             self.pos = pygame.Vector2(500, 500)
+
+        if self.pos.x < self.size[0] / 2:
+            self.pos.x = self.size[0] / 2
+        elif self.pos.x > MAP_WIDTH - self.size[0] / 2:
+            self.pos.x = MAP_WIDTH - self.size[0] / 2
+
+        if self.pos.y < self.size[1] / 2:
+            self.pos.y = self.size[1] / 2
+        elif self.pos.y > MAP_HEIGHT - self.size[1] / 2:
+            self.pos.y = MAP_HEIGHT - self.size[1] / 2
 
 
 class Menu(pygame.sprite.Sprite):
@@ -116,14 +136,15 @@ class Menu(pygame.sprite.Sprite):
 
 
 class Interactive(pygame.sprite.Sprite):
-    def __init__(self, rect: pygame.Rect, *groups) -> None:
+    def __init__(self, rect: pygame.Rect, command: callable, *groups) -> None:
         super().__init__(*groups)
         self.size = rect.size
         self.image = pygame.Surface(self.size)
         self.image.set_colorkey(BLACK)
         self.rect = rect
+        self.command = command
         self.hover = False
-        
+
     def update(self, events):
         for event in events:
             if event.type == pygame.MOUSEMOTION:
@@ -138,14 +159,14 @@ class Interactive(pygame.sprite.Sprite):
                     if event.dict["button"] == 1:
                         self.command()
 
+
 class Button(Interactive):
     def __init__(
         self, rect: pygame.Rect, text: str, command: callable, *groups
     ) -> None:
-        super().__init__(rect, *groups)
+        super().__init__(rect, command, *groups)
         self.image.fill(WHITE)
         self.text = text
-        self.command: callable = command
         self.font = pygame.font.SysFont("simhei", 20)
         text_size = self.font.size(self.text)
         text_render = self.font.render(self.text, True, ALMOST_BLACK, None)
@@ -153,18 +174,15 @@ class Button(Interactive):
             text_render,
             [self.size[0] / 2 - text_size[0] / 2, self.size[1] / 2 - text_size[1] / 2],
         )
-        
+
+
 screen = pygame.display.set_mode(SCREEN_SIZE)
 pygame.display.set_caption("测试")
 clock = pygame.time.Clock()
 pygame.init()
 
 buildings = pygame.sprite.Group()
-Building([500, 500], BLUE, (250, 250), 1, buildings)
-Building([500, 500], YELLOW, (750, 250), 1, buildings)
-Building([500, 500], RED, (250, 750), 1, buildings)
-Building([500, 500], GREEN, (750, 750), 1, buildings)
-for i in range(1000):
+for i in range(100):
     Building(
         [10, 10],
         ALMOST_BLACK,
@@ -172,10 +190,23 @@ for i in range(1000):
         2,
         buildings,
     )
-for i in range(1000):
     Building(
-        [15, 15],
-        WHITE,
+        [10, 10],
+        YELLOW,
+        (random.randint(30, 970), random.randint(30, 970)),
+        3,
+        buildings,
+    )
+    Building(
+        [10, 10],
+        BLUE,
+        (random.randint(30, 970), random.randint(30, 970)),
+        3,
+        buildings,
+    )
+    Building(
+        [10, 10],
+        RED,
         (random.randint(30, 970), random.randint(30, 970)),
         3,
         buildings,
@@ -225,7 +256,6 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if event.dict["key"] in [pygame.K_q, pygame.K_ESCAPE]:
                 pause = not pause
-
     # pause
     if pause:
         if mimic is None:
@@ -244,6 +274,7 @@ while running:
         mimic = None
 
     screen.fill(WHITE)
+    buildings.update()
     camera.update()
     buildings.update()
 
