@@ -18,25 +18,26 @@ import random
 class Dice:
     def __init__(self) -> None:
         self.pool: list[int] = [1, 2, 3, 4, 5, 6]
-        self.last_roll: int = 0
+        self.last_roll: int = -1
 
     def roll(self) -> None:
         self.last_roll = random.choice(self.pool)
 
+    def __str__(self) -> str:
+        return str(self.last_roll)
+
+
+class Unit:
+    def __init__(self, name: str, hp: int) -> None:
+        self.name: str = name
+        self.max_hp: int = hp
+        self.hp: int = self.max_hp
+
 
 class DamageNode:
-    def __init__(self, val) -> None:
+    def __init__(self, val: int, target: type[Unit]) -> None:
         self.val: int = val
-
-
-class OutGoingDamageNode(DamageNode):
-    def __init__(self, val) -> None:
-        super().__init__(val)
-
-
-class InComeDamageNode(DamageNode):
-    def __init__(self, val) -> None:
-        super().__init__(val)
+        self.target: type[Unit] = target
 
 
 class HealNode:
@@ -61,11 +62,9 @@ class Skill_info:
         self.call: Callable[[list[BattleNode]], list[BattleNode]] = call
 
 
-class Character:
+class Character(Unit):
     def __init__(self, name: str, hp: int) -> None:
-        self.name: str = name
-        self.max_hp: int = hp
-        self.hp: int = self.max_hp
+        super().__init__(name, hp)
         self.skills: list[Skill_info] = []
 
 
@@ -92,7 +91,7 @@ class Fighter(Character):
         if the_input.last_roll != 6:
             return False, []
         self.skill1_available -= 1
-        return True, [OutGoingDamageNode(1)]
+        return True, [DamageNode(1, Enemy)]
 
 
 class Wizard(Character):
@@ -126,7 +125,7 @@ class Rogue(Character):
         )
         self.skills.append(
             Skill_info(
-                "Crippling strike ",
+                "Crippling strike",
                 "full house",
                 "dmg = 6th dice, one opponent",
                 self.skill2,
@@ -141,7 +140,7 @@ class Rogue(Character):
             return False, []
         if the_input.last_roll != 1:
             return False, []
-        return True, [OutGoingDamageNode(1)]
+        return True, [DamageNode(1, Enemy)]
 
     def skill2(self, inputs: list[BattleNode]):
         if len(inputs) != 6:
@@ -160,7 +159,7 @@ class Rogue(Character):
                 continue
             p.append(v[i])
         if p:
-            return True, [OutGoingDamageNode(max(p))]
+            return True, [DamageNode(max(p), Enemy)]
         else:
             return False, []
 
@@ -186,16 +185,25 @@ class Cleric(Character):
         )
 
 
-class Enemy:
+class Enemy(Unit):
     def __init__(self, name: str, hp: int) -> None:
-        self.name: str = name
-        self.max_hp: int = hp
-        self.hp: int = self.max_hp
+        super().__init__(name, hp)
+        self.info: str = "Placeholder"
         self.dice_num: int = self.hp
-        self.dices: list[Dice] = [Dice() for _ in range(self.dice_num)]
+        self.last_rolls: list[Dice] = [Dice() for _ in range(self.dice_num)]
 
-    def update(self):
-        self.dice_num = self.hp
+
+class Orc(Enemy):
+    def __init__(self) -> None:
+        super().__init__("Orc", 2)
+        self.info: str = "Hit on 5 and 6"
+
+    def action(self):
+        self.dice_num: int = self.hp
+        self.last_rolls = [Dice() for _ in range(self.dice_num)]
+        for d in self.last_rolls:
+            d.roll()
+        return [DamageNode(i, Character) for i in self.last_rolls]
 
 
 # 中间层
@@ -215,13 +223,15 @@ def Singleton(cls):
 @Singleton
 class GameController:
     def __init__(self) -> None:
-        self.selected = []
+        self.selected: list[BattleNode] = []
         self.battle_container: list[BattleNode] = []
 
         self.cleric = Cleric()
         self.wizard = Wizard()
         self.rogue = Rogue()
         self.fighter = Fighter()
+
+        self.enemys = [Orc(), Orc(), Orc()]
 
         self.reroll_available = self.reroll_max = 3
 
@@ -279,6 +289,27 @@ class GameController:
         self.battle_container.extend(res)
         self.just_updated = True
 
+    def on_hit(self, unit: Unit):
+        if len(self.selected) <= 0:
+            return
+        if unit.hp <= 0:
+            return
+        for node in self.selected:
+            if not isinstance(node, DamageNode):
+                return
+            else:
+                if isinstance(unit, Character):
+                    if node.target == Enemy:
+                        return
+                elif isinstance(unit, Enemy):
+                    if node.target == Character:
+                        return
+        unit.hp -= sum([dn.val for dn in self.selected])
+        for node in self.selected:
+            self.battle_container.remove(node)
+        self.selected.clear()
+        self.just_updated = True
+
 
 game = GameController()
 
@@ -306,6 +337,8 @@ class NodeView(QWidget):
                 label = QLabel("@")
             elif i < self.full:
                 label = QLabel("O")
+            else:
+                continue
             self.layout.addWidget(label, i % 3, i // 3)
 
 
@@ -319,6 +352,9 @@ class CharacterCard(QGroupBox):
         self.middle_layout = QVBoxLayout(self.middle_widget)
         self.hp_bar = NodeView(self.character.max_hp)
         self.middle_layout.addWidget(self.hp_bar)
+        self.hit_btn = QPushButton("on hit", self.middle_widget)
+        self.hit_btn.clicked.connect(partial(game.on_hit, self.character))
+        self.middle_layout.addWidget(self.hit_btn)
         self.layout.addWidget(self.middle_widget)
         # 右侧技能
         self.skill_layout = QVBoxLayout()
@@ -337,7 +373,7 @@ class CharacterCard(QGroupBox):
         self.update()
 
     def update(self):
-        self.hp_bar.update(1)
+        self.hp_bar.update(self.character.hp)
 
 
 class EnemyCard(QGroupBox):
@@ -345,12 +381,34 @@ class EnemyCard(QGroupBox):
         self.enemy = enemy
         super().__init__(self.enemy.name, parent)
 
-        self.layout = QHBoxLayout(self)
-        # 左侧信息
-        self.label = QLabel("Info")
-        self.layout.addWidget(self.label)
+        self.layout = QGridLayout(self)
+        # 左上信息
+        self.label = QLabel(self.enemy.info)
+        self.layout.addWidget(self.label, 0, 0)
+        # 左下on hit
+        self.hit_btn = QPushButton("on hit", self)
+        self.hit_btn.clicked.connect(partial(game.on_hit, self.enemy))
+        self.layout.addWidget(self.hit_btn, 1, 0)
+        # 中间HP
+        self.hp_bar = NodeView(self.enemy.max_hp)
+        self.layout.addWidget(self.hp_bar, 0, 1, 2, 1)
         # 右侧lastroll
-        self.last_roll = 1
+        self.roll_layout = QGridLayout()
+        for i in range(6):
+            if i < self.enemy.dice_num:
+                if self.enemy.last_rolls[i].last_roll == -1:
+                    label = QLabel(" ")
+                else:
+                    label = QLabel(str(self.enemy.last_rolls[i]))
+            elif i < self.enemy.dice_num:
+                label = QLabel("/")
+            else:
+                continue
+            self.roll_layout.addWidget(label, i % 3, i // 3)
+        self.layout.addLayout(self.roll_layout, 0, 2, 2, 1)
+
+    def update(self):
+        self.hp_bar.update(self.enemy.hp)
 
 
 class MyApplication(QMainWindow):
@@ -395,9 +453,8 @@ class MyApplication(QMainWindow):
         # 中右enemy
         self.enemys = QWidget()
         self.enemys_layout = QVBoxLayout(self.enemys)
-        self.enemys_layout.addWidget(EnemyCard(Enemy("111", 2), self))
-        self.enemys_layout.addWidget(EnemyCard(Enemy("1211", 2), self))
-        self.enemys_layout.addWidget(EnemyCard(Enemy("1211", 2), self))
+        for enemy in game.enemys:
+            self.enemys_layout.addWidget(EnemyCard(enemy, self))
 
         # 设置主布局
         self.global_layout = QGridLayout(self.global_widget)
@@ -421,10 +478,11 @@ class MyApplication(QMainWindow):
             for node in game.battle_container:
                 if isinstance(node, Dice):
                     btn = QPushButton(str(node.last_roll))
-                elif isinstance(node, OutGoingDamageNode):
-                    btn = QPushButton(f"{node.val} ->")
-                elif isinstance(node, InComeDamageNode):
-                    btn = QPushButton(f"<- {node.val}")
+                elif isinstance(node, DamageNode):
+                    if node.target == Enemy:
+                        btn = QPushButton(f"{node.val} ->")
+                    elif node.target == Character:
+                        btn = QPushButton(f"<- {node.val}")
                 elif isinstance(node, HealNode):
                     btn = QPushButton(f"Heal")
 
@@ -432,6 +490,10 @@ class MyApplication(QMainWindow):
                     btn.setStyleSheet("QPushButton { color: red;}")
                 btn.clicked.connect(partial(game.on_select, node))
                 self.battle_node_layout.addWidget(btn)
+            for i in range(self.player_layout.count()):
+                self.player_layout.itemAt(i).widget().update()
+            for j in range(self.enemys_layout.count()):
+                self.enemys_layout.itemAt(j).widget().update()
         game.update()
 
 
