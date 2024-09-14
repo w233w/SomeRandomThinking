@@ -22,6 +22,8 @@ from dataclasses import dataclass
 import random
 from typing import Literal, overload, Self, TypeAlias
 import json
+from collections import defaultdict
+from math import ceil
 
 # qt version of l.py
 # u play rouge leader, a hidden black magic beginner。
@@ -79,18 +81,56 @@ class BattleInfo:
 class Equipment:
     def __init__(self, name, part, base_status, description: str = "") -> None:
         self.name: str = name
-        self.part: Literal["Head", "Body", "Hand", "Leg", "Foot", "Ring"] = part
+        self.part: Literal["Weapon", "Head", "Body", "Hand", "Leg", "Foot", "Ring"] = (
+            part
+        )
         self.base_status: dict[CBattleStatus, float] = base_status
         self.description: str = description
+
+    @property
+    def info(self):
+        s = ""
+        for k, v in self.base_status.items():
+            s += f"{k}: {v}\n"
+        s = s[:-1]
+        return s
 
     def as_json(self):
         return self.__dict__
 
 
+@dataclass(frozen=True)
 class Item:
-    def __init__(self, name: str, description: str) -> None:
-        self.name: str = name
-        self.description: str = description
+    name: str
+    description: str
+
+
+Items = {
+    "gold": Item("gold", "gold"),
+    "red shard": Item("red shard", "tier1 red gem"),
+    "red shard2": Item("red shard2", "tier1 red gem"),
+    "red shard3": Item("red shard3", "tier1 red gem"),
+    "red shard4": Item("red shard4", "tier1 red gem"),
+    "red shard5": Item("red shard5", "tier1 red gem"),
+}
+
+
+class ItemController:
+    def __init__(self) -> None:
+        self.container: dict[Item, int] = defaultdict(int)
+
+    def __getitem__(self, key: Item):
+        return self.container[key]
+
+    def add(self, items: dict[Item, int]) -> None:
+        for k, v in items.items():
+            self.container[k] += v
+
+    def __len__(self) -> int:
+        return len(self.container)
+
+    def __iter__(self):
+        return iter(self.container.items())
 
 
 class Character:
@@ -107,7 +147,7 @@ class Character:
 
     # hp, min_atk max_atk crit crit_dmg pyh_defence mgc_defence dodge mgc_multi spell_will
     def update_battle_info(self) -> None:
-        self.hp = self.max_hp = 20 + self.strength * 3
+        self.hp = self.max_hp = 20 + self.strength * 5
         self.min_atk = min(self.strength, self.agility)
         self.max_atk = max(self.strength, self.agility)
         self.crit = min(0.7, 0.05 + 0.0025 * self.agility + 0.001 * self.wisdom)
@@ -148,10 +188,10 @@ class Character:
                 base_atk = random.randint(self.min_atk, self.max_atk)
             if random.random() < self.crit:
                 return BattleInfo(
-                    "physic", base_atk * self.crit_dmg, "Crit hit", self, target
+                    "physic", base_atk * self.crit_dmg, "<b>Crit hit</b>", self, target
                 )
             else:
-                return BattleInfo("physic", base_atk, "Attack", self, target)
+                return BattleInfo("physic", base_atk, "<b>Attack</b>", self, target)
 
     @property
     def power(self):
@@ -179,16 +219,19 @@ class Player(Character):
     def __init__(self) -> None:
         super().__init__(10, 10, 10, "Player")
         self.spells.append(Spell("Throw Fire", 1, "magic", 10, 15, 2))
-        self.equipments.append(Equipment("Omni-helmet", "head", {"hp": 10000}))
-        print(self.equipments[0].as_json())
-        self.gold: int = 10
+        # self.equipments.append(Equipment("Omni-helmet", "head", {"hp": 10000}))
+        # self.equipments.append(
+        #     Equipment("King-Axe", "weapon", {"min_atk": 100, "max_atk": 1000})
+        # )
+        self.items = ItemController()
         self.tier: int = 0
 
-    def get_reward(self, **reward):
-        for k, v in reward.items():
-            if hasattr(self, k):
-                current = getattr(self, k)
-                setattr(self, k, current + v)
+    @property
+    def gold(self) -> int:
+        return self.items[Items["gold"]]
+
+    def get_reward(self, reward: dict[Item, int]) -> None:
+        self.items.add(reward)
 
 
 class Enemy(Character):
@@ -199,8 +242,15 @@ class Enemy(Character):
         super().__init__(wisdom, strength, agility, name)
         self.gold = code**2
 
-    def drop_reward(self):
-        return {"gold": self.gold}
+    def drop_reward(self) -> dict[Item, int]:
+        return {
+            Items["gold"]: self.gold,
+            Items["red shard"]: 1,
+            Items["red shard2"]: 1,
+            Items["red shard3"]: 1,
+            Items["red shard4"]: 1,
+            Items["red shard5"]: 1,
+        }
 
 
 class BattleController:
@@ -227,15 +277,15 @@ class BattleController:
     def fight(self):
         if self.player_turn:
             self.last_bf = self.player.make_action(self.opponent)
-            print("Player to opponent", self.last_bf)
+            # print("Player to opponent", self.last_bf)
             self.opponent.on_attack(self.last_bf)
         else:
             self.last_bf = self.opponent.make_action(self.player)
-            print("Opponent to player", self.last_bf)
+            # print("Opponent to player", self.last_bf)
             self.player.on_attack(self.last_bf)
         self.player_turn = not self.player_turn
 
-    def reward(self):
+    def reward(self) -> dict[Item, int]:
         return self.opponent.drop_reward()
 
 
@@ -286,7 +336,7 @@ class MyWidget(QMainWindow):
 
         # item tab
         self.item_tab = QWidget()
-        self.draw_item_tab()
+        self.define_item_tab()
         self.tab_widget.addTab(self.item_tab, "物品")
 
         # TODO equipment tab
@@ -295,7 +345,12 @@ class MyWidget(QMainWindow):
 
         # TODO skill tab
         self.skill_tab = QWidget()
+        self.draw_skill_tab()
         self.tab_widget.addTab(self.skill_tab, "技能")
+
+        # TODO ritual tab
+        self.ritual_tab = QWidget()
+        self.tab_widget.addTab(self.ritual_tab, "仪式")
 
         # 设置主布局
         self.global_widget = QWidget()
@@ -336,9 +391,15 @@ class MyWidget(QMainWindow):
         # TODO event scene
         self.event_scene = QWidget()
         self.event_scene_layout = QVBoxLayout(self.event_scene)
+        self.define_event_scene()
+        self.event_timer
+
+        # TODO explore scene
 
         self.center_layout.addWidget(self.battle_scene)
+        self.center_layout.addWidget(self.event_scene)
         self.battle_scene.setVisible(False)
+        self.event_scene.setVisible(False)
 
         # 探索进度条
         self.explore_progress_bar = QProgressBar()
@@ -349,7 +410,7 @@ class MyWidget(QMainWindow):
 
         self.explore_description = QLabel()
         self.explore_description
-        self.explore_description.setText("\n")
+        self.explore_description.setText("<p></p>")
 
         self.explore_tab_layout = QVBoxLayout(self.explore_tab)
         self.explore_tab_layout.addWidget(self.center)
@@ -399,14 +460,14 @@ class MyWidget(QMainWindow):
         self.wisdom2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.battle_scene_layout.addWidget(self.wisdom2, 2, 5)
 
-    def draw_battle_scene(self):
+    def update_battle_scene(self):
         self.name_1.setText(self.bc.player.name)
         self.hp_bar1.setValue(10000 * self.bc.player.hp / self.bc.player.max_hp)
-        self.hp_bar1.setFormat(f"{round(self.bc.player.hp)} / {self.bc.player.max_hp}")
+        self.hp_bar1.setFormat(f"{ceil(self.bc.player.hp)} / {self.bc.player.max_hp}")
         self.name_2.setText(self.bc.opponent.name)
         self.hp_bar2.setValue(10000 * self.bc.opponent.hp / self.bc.opponent.max_hp)
         self.hp_bar2.setFormat(
-            f"{round(self.bc.opponent.hp)} / {self.bc.opponent.max_hp}"
+            f"{ceil(self.bc.opponent.hp)} / {self.bc.opponent.max_hp}"
         )
         self.strength1.setText(str(self.bc.player.strength))
         self.agility1.setText(str(self.bc.player.agility))
@@ -421,10 +482,15 @@ class MyWidget(QMainWindow):
                 + self.bc.last_bf.description
                 + " on "
                 + self.bc.last_bf.dest.name
-                + "\n"
             )
 
-    def draw_item_tab(self):
+    def define_event_scene(self):
+        pass
+
+    def draw_skill_tab(self):
+        pass
+
+    def define_item_tab(self):
         self.item_table = QTableWidget()
         self.item_table.setColumnCount(2)
         self.item_table.setHorizontalHeaderLabels(["Name", "Volumn"])
@@ -434,7 +500,7 @@ class MyWidget(QMainWindow):
         self.item_table.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Fixed
         )
-        self.item_table.horizontalHeader().resizeSection(1, 70)
+        self.item_table.horizontalHeader().resizeSection(1, 50)
 
         self.item_tab_layout = QHBoxLayout(self.item_tab)
         self.item_tab_layout.addWidget(self.item_table)
@@ -442,15 +508,15 @@ class MyWidget(QMainWindow):
         self.update_item_table()
 
     def update_item_table(self):
-        self.item_table.setRowCount(len(self.player.equipments))
-        for eq in self.player.equipments:
-            name = QTableWidgetItem(eq.name)
+        self.item_table.setRowCount(len(self.player.items))
+        for i, (item, vol) in enumerate(self.player.items):
+            name = QTableWidgetItem(item.name)
             name.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            name.setToolTip(repr(eq.base_status))
-            self.item_table.setItem(0, 0, name)
-            volumn = QTableWidgetItem("1")
+            name.setToolTip(item.description)
+            self.item_table.setItem(i, 0, name)
+            volumn = QTableWidgetItem(str(vol))
             volumn.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.item_table.setItem(0, 1, volumn)
+            self.item_table.setItem(i, 1, volumn)
 
     @Slot()
     def global_timer_update(self):
@@ -463,13 +529,17 @@ class MyWidget(QMainWindow):
                     self.explore_progress_bar.value() + self.explore_rate,
                 )
                 self.explore_progress_bar.setValue(new_val)
+                if self.explore_description.text != "":
+                    self.explore_description.setText("<p></p>")
                 if random.randint(0, 10000) < 50:
                     self.start_battle()
         else:
             self.explore_progress_bar.setValue(self.explore_rate)
             self.update_status("Explore done.")
+            self.player.tier += 1
         # 更新资源
         self.info_gold.setText(str(self.player.gold))
+        self.info_tier.setText(str(self.player.tier))
 
     @Slot()
     def update_status(self, massage: str, delay: int = 1500):
@@ -477,22 +547,31 @@ class MyWidget(QMainWindow):
 
     def start_battle(self):
         print("Battle start")
-        self.bc = BattleController(self.player, Enemy(self.player.tier + 3))
-        self.draw_battle_scene()
+        if random.random() < 0.9:
+            self.bc = BattleController(self.player, Enemy(self.player.tier + 3))
+        else:
+            self.bc = BattleController(self.player, Enemy(self.player.tier + 5, "BIG"))
+        self.update_battle_scene()
         self.on_battle = True
         self.battle_scene.setVisible(True)
-        self.battle_timer.start(1000)
+        self.battle_timer.start(500)
 
     @Slot()
     def battle(self):
         self.bc.fight()
-        self.draw_battle_scene()
+        self.update_battle_scene()
         flag, loser = self.bc.battle_end
         if flag:
             if self.player in loser:
                 self.explore_progress_bar.reset()
+                self.player.tier -= 1
             else:
-                self.player.get_reward(**self.bc.reward())
+                reward = self.bc.reward()
+                self.player.get_reward(reward)
+                string = "获得："
+                for k, v in reward.items():
+                    string += f"{k.name}*{v}; "
+                self.update_status(string)
             self.end_battle()
 
     def end_battle(self):
@@ -500,10 +579,12 @@ class MyWidget(QMainWindow):
         self.on_battle = False
         self.battle_timer.stop()
         self.battle_scene.setVisible(False)
+        self.update_item_table()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyle("WindowsVista")
     widget = MyWidget()
     widget.show()
     sys.exit(app.exec())
