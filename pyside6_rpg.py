@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtWidgets import *
 from PySide6.QtCore import QTimer, Qt, Slot
 from PySide6.QtGui import QIntValidator, QColor, QAction
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import random
 from typing import Literal, overload, Self, TypeAlias
 import json
@@ -28,19 +28,6 @@ from math import ceil
 # qt version of l.py
 # u play rouge leader, a hidden black magic beginner。
 # unfinished
-
-CBattleStatus: TypeAlias = Literal[
-    "hp",
-    "min_atk",
-    "max_atk",
-    "crit",
-    "crit_dmg",
-    "pyh_defence",
-    "mgc_defence",
-    "dodge",
-    "mgc_multi",
-    "spell_will",
-]
 
 
 class Spell:
@@ -78,40 +65,37 @@ class BattleInfo:
     dest: "Character"
 
 
+@dataclass(frozen=True)
+class Equipment_status:
+    max_hp: int = None
+    min_atk: int = None
+    max_atk: int = None
+    crit: float = None
+    crit_dmg: float = None
+    pyh_defence: float = None
+    mgc_defence: float = None
+    dodge: float = None
+    mgc_multi: float = None
+    spell_will: float = None
+
+
+@dataclass(frozen=True)
 class Equipment:
-    def __init__(self, name, part, base_status, description: str = "") -> None:
-        self.name: str = name
-        self.part: Literal["Weapon", "Head", "Body", "Hand", "Leg", "Foot", "Ring"] = (
-            part
-        )
-        self.base_status: dict[CBattleStatus, float] = base_status
-        self.description: str = description
-
-    @property
-    def info(self):
-        s = ""
-        for k, v in self.base_status.items():
-            s += f"{k}: {v}\n"
-        s = s[:-1]
-        return s
-
-    def as_json(self):
-        return self.__dict__
+    name: str
+    part: Literal["Weapon", "Head", "Body", "Hand", "Leg", "Foot", "Ring"]
+    equipment_status: Equipment_status
+    description: str = ""
 
 
 @dataclass(frozen=True)
 class Item:
     name: str
-    description: str
+    description: str = ""
 
 
 Items = {
     "gold": Item("gold", "gold"),
     "red shard": Item("red shard", "tier1 red gem"),
-    "red shard2": Item("red shard2", "tier1 red gem"),
-    "red shard3": Item("red shard3", "tier1 red gem"),
-    "red shard4": Item("red shard4", "tier1 red gem"),
-    "red shard5": Item("red shard5", "tier1 red gem"),
 }
 
 
@@ -133,6 +117,39 @@ class ItemController:
         return iter(self.container.items())
 
 
+class EquipmentController:
+    def __init__(self) -> None:
+        self.container: dict[str, list[Equipment]] = {
+            "Weapon": [],
+            "Head": [],
+            "Body": [],
+            "Hand": [],
+            "Leg": [],
+            "Foot": [],
+            "Ring": [],
+        }
+        self.equiped: dict[str, Equipment | None] = {
+            "Weapon": None,
+            "Head": None,
+            "Body": None,
+            "Hand": None,
+            "Leg": None,
+            "Foot": None,
+            "Ring": None,
+        }
+
+    def overall_info(self):
+        num = 0
+        for l in self.container.values():
+            num += len(l)
+
+    def get_equipment(self, equipment: Equipment, equip: bool):
+        part = equipment.part
+        self.container[part].append(equipment)
+        if equip:
+            self.equiped[part] = equipment
+
+
 class Character:
     def __init__(self, wisdom, strength, agility, name) -> None:
         self.wisdom: int = wisdom
@@ -140,14 +157,13 @@ class Character:
         self.agility: int = agility
         self.name: str = name
         self.spells: list[Spell] = []
-        self.equipments: list[Equipment] = []
 
     def __repr__(self) -> str:
         return self.name
 
     # hp, min_atk max_atk crit crit_dmg pyh_defence mgc_defence dodge mgc_multi spell_will
     def update_battle_info(self) -> None:
-        self.hp = self.max_hp = 20 + self.strength * 5
+        self.max_hp = 20 + self.strength * 5
         self.min_atk = min(self.strength, self.agility)
         self.max_atk = max(self.strength, self.agility)
         self.crit = min(0.7, 0.05 + 0.0025 * self.agility + 0.001 * self.wisdom)
@@ -157,15 +173,7 @@ class Character:
         self.dodge = min(0.7, max(0, 0.002 * self.agility - 0.002 * self.strength))
         self.mgc_multi = 1 + 0.05 * self.wisdom
         self.spell_will = 0.2 + 0.08 * len(self.spells)  # chance to cast spell
-        for equipment in self.equipments:
-            attrs = equipment.base_status
-            for k, v in attrs.items():
-                if hasattr(self, k):
-                    if k == "hp":
-                        self.hp += v
-                        self.max_hp += v
-                    else:
-                        setattr(self, k, getattr(self, k) + v)
+        self.hp = self.max_hp
 
     def make_action(self, target: Self) -> BattleInfo:
         if random.random() < self.spell_will and self.spells != []:
@@ -219,12 +227,28 @@ class Player(Character):
     def __init__(self) -> None:
         super().__init__(10, 10, 10, "Player")
         self.spells.append(Spell("Throw Fire", 1, "magic", 10, 15, 2))
-        # self.equipments.append(Equipment("Omni-helmet", "head", {"hp": 10000}))
-        # self.equipments.append(
-        #     Equipment("King-Axe", "weapon", {"min_atk": 100, "max_atk": 1000})
-        # )
         self.items = ItemController()
+        self.equipments = EquipmentController()
+
+        self.equipments.get_equipment(
+            Equipment("Omni-helmet", "Head", Equipment_status(**{"max_hp": 10000})),
+            True,
+        )
         self.tier: int = 0
+
+    def update_battle_info(self) -> None:
+        super().update_battle_info()
+        for equipment in self.equipments.equiped.values():
+            if equipment is None:
+                continue
+            attrs: Equipment_status = equipment.equipment_status
+            attrs = asdict(
+                attrs, dict_factory=lambda x: {k: v for (k, v) in x if v is not None}
+            )
+            for k, v in attrs.items():
+                if hasattr(self, k):
+                    setattr(self, k, getattr(self, k) + v)
+        self.hp = self.max_hp
 
     @property
     def gold(self) -> int:
@@ -235,26 +259,82 @@ class Player(Character):
 
 
 class Enemy(Character):
-    def __init__(self, code, name="Test") -> None:
+    def __init__(self, name, reward, code) -> None:
         wisdom: int = code**2 + random.randint(-code, code)
         strength: int = code**2 + random.randint(-code, code)
         agility: int = code**2 + random.randint(-code, code)
         super().__init__(wisdom, strength, agility, name)
-        self.gold = code**2
+        self.reward = reward
 
     def drop_reward(self) -> dict[Item, int]:
-        return {
-            Items["gold"]: self.gold,
-            Items["red shard"]: 1,
-            Items["red shard2"]: 1,
-            Items["red shard3"]: 1,
-            Items["red shard4"]: 1,
-            Items["red shard5"]: 1,
+        return self.reward
+
+
+class MapController:
+    def __init__(self) -> None:
+        # with open("./temp2.json") as j:
+        #     self.map_data = json.loads(j.read())
+        self.map_data = {
+            "jail": {
+                "level": {
+                    "-1": {
+                        "enemy_base_tier": 3,
+                        "enemys": [
+                            {
+                                "name": "unnamed",
+                                "spawn_priority": 80,
+                                "drops": {
+                                    "items": [{"name": "gold", "val": 4, "p": 1.0}],
+                                    "equipments": [
+                                        {
+                                            "name": "Broken Cloth",
+                                            "part": "Body",
+                                            "equipment_status": {"max_hp": 5},
+                                            "description": "a piece of cloth",
+                                            "p": 0.95,
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                }
+            }
         }
+        self.current_map = "jail"
+        self.current_level = "-1"
+
+    def spawn_enemy(self):
+        m = self.map_data[self.current_map]
+        l = m["level"][self.current_level]
+        e_pow: int = l["enemy_base_tier"]
+        pool = l["enemys"]
+        e = random.choices(pool, [e["spawn_priority"] for e in pool], k=1)[0]
+        reward = {}
+        for i in e["drops"]["items"]:
+            p = i["p"]
+            if random.random() < p:
+                name, val = i["name"], i["val"]
+                item = Items[name]
+                reward[item] = val
+        for i in e["drops"]["equipments"]:
+            p = i["p"]
+            if random.random() < p:
+                name, part, equipment_status, description = (
+                    i["name"],
+                    i["part"],
+                    i["equipment_status"],
+                    i["description"],
+                )
+                equipment = Equipment(
+                    name, part, Equipment_status(**equipment_status), description
+                )
+                reward[equipment] = 1
+        return Enemy(e["name"], reward, e_pow)
 
 
 class BattleController:
-    def __init__(self, player, opponent) -> None:
+    def __init__(self, player: Player, opponent: Enemy) -> None:
         self.player: Player = player
         self.player.update_battle_info()
         self.opponent: Enemy = opponent
@@ -341,6 +421,7 @@ class MyWidget(QMainWindow):
 
         # TODO equipment tab
         self.equipment_tab = QWidget()
+        self.define_equipment_tab()
         self.tab_widget.addTab(self.equipment_tab, "装备")
 
         # TODO skill tab
@@ -376,6 +457,7 @@ class MyWidget(QMainWindow):
         self.close()
 
     def draw_explore_tab(self):
+        self.map_controller = MapController()
         # 事件/战斗界面
         self.center = QWidget()
         self.center.setAutoFillBackground(True)
@@ -392,7 +474,7 @@ class MyWidget(QMainWindow):
         self.event_scene = QWidget()
         self.event_scene_layout = QVBoxLayout(self.event_scene)
         self.define_event_scene()
-        self.event_timer
+        self.event_timer = QTimer()
 
         # TODO explore scene
 
@@ -484,6 +566,25 @@ class MyWidget(QMainWindow):
                 + self.bc.last_bf.dest.name
             )
 
+    def define_equipment_tab(self):
+        self.equipment_controller = EquipmentController()
+
+        self.equipment_tab_main = QWidget()
+        self.equipment_tab_main_layout = QGridLayout(self.equipment_tab_main)
+        for r in range(2):
+            for c in range(5):
+                self.equipment_tab_main_layout.addWidget(QPushButton("1"), r, c)
+
+        self.equipment_tab_main2 = QWidget()
+        self.equipment_tab_main_layout2 = QGridLayout(self.equipment_tab_main2)
+        for r in range(2):
+            for c in range(5):
+                self.equipment_tab_main_layout2.addWidget(QPushButton("1"), r, c)
+
+        self.equipment_tab_layout = QVBoxLayout(self.equipment_tab)
+        self.equipment_tab_layout.addWidget(self.equipment_tab_main)
+        self.equipment_tab_layout.addWidget(self.equipment_tab_main2)
+
     def define_event_scene(self):
         pass
 
@@ -500,7 +601,7 @@ class MyWidget(QMainWindow):
         self.item_table.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Fixed
         )
-        self.item_table.horizontalHeader().resizeSection(1, 50)
+        self.item_table.horizontalHeader().resizeSection(1, 60)
 
         self.item_tab_layout = QHBoxLayout(self.item_tab)
         self.item_tab_layout.addWidget(self.item_table)
@@ -546,11 +647,7 @@ class MyWidget(QMainWindow):
         self.statusBar().showMessage(massage, delay)
 
     def start_battle(self):
-        print("Battle start")
-        if random.random() < 0.9:
-            self.bc = BattleController(self.player, Enemy(self.player.tier + 3))
-        else:
-            self.bc = BattleController(self.player, Enemy(self.player.tier + 5, "BIG"))
+        self.bc = BattleController(self.player, self.map_controller.spawn_enemy())
         self.update_battle_scene()
         self.on_battle = True
         self.battle_scene.setVisible(True)
@@ -575,7 +672,6 @@ class MyWidget(QMainWindow):
             self.end_battle()
 
     def end_battle(self):
-        print("Battle end")
         self.on_battle = False
         self.battle_timer.stop()
         self.battle_scene.setVisible(False)
