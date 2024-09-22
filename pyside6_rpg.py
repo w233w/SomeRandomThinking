@@ -12,16 +12,13 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QGroupBox,
     QPushButton,
-    QLineEdit,
-    QTableView,
 )
-from PySide6.QtWidgets import *
+from PySide6.QtWidgets import QMenu, QTableWidget, QHeaderView, QTableWidgetItem
 from PySide6.QtCore import QTimer, Qt, Slot
-from PySide6.QtGui import QIntValidator, QColor, QAction
+from PySide6.QtGui import QAction
 from dataclasses import dataclass, asdict
 import random
-from typing import Literal, overload, Self, TypeAlias
-import json
+from typing import Literal, Self, TypeAlias
 from collections import defaultdict
 from math import ceil
 
@@ -270,6 +267,15 @@ class Enemy(Character):
         return self.reward
 
 
+maps_connect = [
+    {
+        ['jail', -1]: [['dryout land', 8], ['jail', -2]],
+        ['jail', -2]: [['jail', -1], ['jail', -3]],
+        ['jail', -3]: [['jail', -2], ['mine', -2]],
+    }
+]
+
+
 class MapController:
     def __init__(self) -> None:
         # with open("./temp2.json") as j:
@@ -426,7 +432,7 @@ class MyWidget(QMainWindow):
 
         # TODO skill tab
         self.skill_tab = QWidget()
-        self.draw_skill_tab()
+        self.define_skill_tab()
         self.tab_widget.addTab(self.skill_tab, "技能")
 
         # TODO ritual tab
@@ -588,7 +594,7 @@ class MyWidget(QMainWindow):
     def define_event_scene(self):
         pass
 
-    def draw_skill_tab(self):
+    def define_skill_tab(self):
         pass
 
     def define_item_tab(self):
