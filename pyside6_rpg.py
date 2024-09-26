@@ -12,8 +12,13 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QGroupBox,
     QPushButton,
+    QMenu,
+    QTableWidget,
+    QHeaderView,
+    QTableWidgetItem,
+    QTextEdit,
+    QLayoutItem,
 )
-from PySide6.QtWidgets import QMenu, QTableWidget, QHeaderView, QTableWidgetItem
 from PySide6.QtCore import QTimer, Qt, Slot
 from PySide6.QtGui import QAction
 from dataclasses import dataclass, asdict
@@ -92,6 +97,7 @@ class Item:
 
 Items = {
     "gold": Item("gold", "gold"),
+    "arc shard": Item("arc shard", "充斥着奥数能量的小碎片"),
     "red shard": Item("red shard", "tier1 red gem"),
 }
 
@@ -267,13 +273,21 @@ class Enemy(Character):
         return self.reward
 
 
-maps_connect = [
-    {
-        ['jail', -1]: [['dryout land', 8], ['jail', -2]],
-        ['jail', -2]: [['jail', -1], ['jail', -3]],
-        ['jail', -3]: [['jail', -2], ['mine', -2]],
-    }
-]
+class Event:
+    def __init__(self, description: str, options: tuple[dict]) -> None:
+        self.description: str = description
+        self.options: tuple[dict] = options
+        self.true_options: list[str] = []
+        self.call_backs: list = []
+        for reward in self.options:
+            self.true_options.append(reward["option"])
+            effect: dict = reward["effect"]
+            if "enemy" in effect:
+                enemy = effect["enemy"]
+            if "items" in effect:
+                pass
+            if "equipment" in effect:
+                pass
 
 
 class MapController:
@@ -281,40 +295,99 @@ class MapController:
         # with open("./temp2.json") as j:
         #     self.map_data = json.loads(j.read())
         self.map_data = {
-            "jail": {
-                "level": {
-                    "-1": {
-                        "enemy_base_tier": 3,
-                        "enemys": [
-                            {
-                                "name": "unnamed",
-                                "spawn_priority": 80,
-                                "drops": {
-                                    "items": [{"name": "gold", "val": 4, "p": 1.0}],
-                                    "equipments": [
-                                        {
-                                            "name": "Broken Cloth",
-                                            "part": "Body",
-                                            "equipment_status": {"max_hp": 5},
-                                            "description": "a piece of cloth",
-                                            "p": 0.95,
+            ("jail", "地下1层"): {
+                "connect": [("jail", "地下2层")],
+                "enemy_base_tier": 3,
+                "enemys": [
+                    {
+                        "name": "unnamed",
+                        "spawn_priority": 80,
+                        "drops": {
+                            "items": [{"name": "gold", "val": 4, "p": 1.0}],
+                            "equipments": [
+                                {
+                                    "name": "Broken Cloth",
+                                    "part": "Body",
+                                    "equipment_status": {"max_hp": 5},
+                                    "description": "a piece of cloth",
+                                    "p": 0.05,
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "name": "strange prisoner",
+                        "spawn_priority": 0,
+                        "drops": {
+                            "items": [
+                                {"name": "gold", "val": 22, "p": 1.0},
+                                {"name": "arc shard", "val": 1, "p": 1.0},
+                            ],
+                        },
+                    },
+                ],
+                "events": [
+                    {
+                        "id": 1,
+                        "info": {
+                            "description": "有个囚犯背对着你，口中念念有词。\n*似乎仍然保留有一定神志。",
+                            "options": [
+                                {
+                                    "option": "上前看看",
+                                    "effect": {
+                                        "enemy": {
+                                            "name": "strange prisoner",
+                                            "spawn_priority": 0,
+                                            "drops": {
+                                                "items": [
+                                                    {
+                                                        "name": "gold",
+                                                        "val": 22,
+                                                        "p": 1.0,
+                                                    },
+                                                    {
+                                                        "name": "arc shard",
+                                                        "val": 1,
+                                                        "p": 1.0,
+                                                    },
+                                                ],
+                                            },
                                         }
-                                    ],
+                                    },
                                 },
-                            }
-                        ],
+                                {"option": "无视", "effect": {}},
+                                {
+                                    "option": "发起攻击",
+                                    "effect": {
+                                        "items": [
+                                            {"name": "arc shard", "val": 1, "p": 1.0},
+                                        ]
+                                    },
+                                },
+                            ],
+                        },
+                        "p": 10,
+                        "encounter": 0,
                     }
-                }
+                ],
             }
         }
-        self.current_map = "jail"
-        self.current_level = "-1"
+        self.current_map = ("jail", "地下1层")
+
+    def spawn_event(self, on_explore_end: bool = False):
+        # TODO
+        if on_explore_end:
+            possible_path = self.map_data[self.current_map]["connect"]
+        else:
+            events = self.map_data[self.current_map]["events"]
+            weights = [i["p"] for i in events]
+            event = random.choices(events, weights, k=1)[0]
+            return Event(**event["info"])
 
     def spawn_enemy(self):
-        m = self.map_data[self.current_map]
-        l = m["level"][self.current_level]
-        e_pow: int = l["enemy_base_tier"]
-        pool = l["enemys"]
+        level = self.map_data[self.current_map]
+        e_pow: int = level["enemy_base_tier"]
+        pool = level["enemys"]
         e = random.choices(pool, [e["spawn_priority"] for e in pool], k=1)[0]
         reward = {}
         for i in e["drops"]["items"]:
@@ -437,6 +510,7 @@ class MyWidget(QMainWindow):
 
         # TODO ritual tab
         self.ritual_tab = QWidget()
+        self.define_ritual_tab()
         self.tab_widget.addTab(self.ritual_tab, "仪式")
 
         # 设置主布局
@@ -462,6 +536,15 @@ class MyWidget(QMainWindow):
             RuntimeError("Save failed.")
         self.close()
 
+    def clear_layout(self, layout):
+        item_list = list(range(layout.count()))
+        item_list.reverse()  # 倒序删除，避免影响布局顺序
+
+        for i in item_list:
+            item: QLayoutItem = layout.itemAt(i)
+            item.widget().deleteLater()
+            layout.removeItem(item)
+
     def draw_explore_tab(self):
         self.map_controller = MapController()
         # 事件/战斗界面
@@ -470,6 +553,10 @@ class MyWidget(QMainWindow):
 
         self.center_layout = QStackedLayout(self.center)
 
+        # 占位符
+        self.place_holder = QWidget()
+
+        # battle scene
         self.battle_scene = QWidget()
         self.battle_scene_layout = QGridLayout(self.battle_scene)
         self.define_battle_scene()
@@ -481,13 +568,12 @@ class MyWidget(QMainWindow):
         self.event_scene_layout = QVBoxLayout(self.event_scene)
         self.define_event_scene()
         self.event_timer = QTimer()
+        # self.battle_timer.timeout.connect(self.battle)
 
-        # TODO explore scene
-
+        self.center_layout.addWidget(self.place_holder)
         self.center_layout.addWidget(self.battle_scene)
         self.center_layout.addWidget(self.event_scene)
-        self.battle_scene.setVisible(False)
-        self.event_scene.setVisible(False)
+        self.center_layout.setCurrentIndex(0)
 
         # 探索进度条
         self.explore_progress_bar = QProgressBar()
@@ -497,7 +583,6 @@ class MyWidget(QMainWindow):
         self.explore_rate = 10
 
         self.explore_description = QLabel()
-        self.explore_description
         self.explore_description.setText("<p></p>")
 
         self.explore_tab_layout = QVBoxLayout(self.explore_tab)
@@ -547,6 +632,10 @@ class MyWidget(QMainWindow):
         self.wisdom2.setStyleSheet("QLabel { color: blue;}")
         self.wisdom2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.battle_scene_layout.addWidget(self.wisdom2, 2, 5)
+        # self.battle_record = QTextEdit()
+        # self.battle_record.resize(100, 100)
+        # self.battle_record_cursor = self.battle_record.textCursor()
+        # self.battle_scene_layout.addWidget(self.battle_record, 3, 0, 3, 6)
 
     def update_battle_scene(self):
         self.name_1.setText(self.bc.player.name)
@@ -572,6 +661,24 @@ class MyWidget(QMainWindow):
                 + self.bc.last_bf.dest.name
             )
 
+    def define_event_scene(self):
+        self.event_description = QLabel(" ")
+        self.event_description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.event_options = QWidget()
+        self.event_options_layout = QHBoxLayout(self.event_options)
+
+        self.event_scene_layout.addWidget(self.event_description)
+        self.event_scene_layout.addWidget(self.event_options)
+
+    def update_event_scene(self):
+        self.clear_layout(self.event_options_layout)
+        self.event_description.setText(self.current_event.description)
+        for i in range(len(self.current_event.options)):
+            btn = QPushButton(f"{self.current_event.options[i]}")
+            btn.clicked.connect(self.end_event)
+            self.event_options_layout.addWidget(btn)
+
     def define_equipment_tab(self):
         self.equipment_controller = EquipmentController()
 
@@ -579,22 +686,26 @@ class MyWidget(QMainWindow):
         self.equipment_tab_main_layout = QGridLayout(self.equipment_tab_main)
         for r in range(2):
             for c in range(5):
-                self.equipment_tab_main_layout.addWidget(QPushButton("1"), r, c)
+                btn = QPushButton("1")
+                btn.setMaximumSize(20, 20)
+                self.equipment_tab_main_layout.addWidget(btn, r, c)
 
         self.equipment_tab_main2 = QWidget()
         self.equipment_tab_main_layout2 = QGridLayout(self.equipment_tab_main2)
         for r in range(2):
             for c in range(5):
-                self.equipment_tab_main_layout2.addWidget(QPushButton("1"), r, c)
+                btn = QPushButton("1")
+                btn.setMaximumSize(20, 20)
+                self.equipment_tab_main_layout2.addWidget(btn, r, c)
 
         self.equipment_tab_layout = QVBoxLayout(self.equipment_tab)
         self.equipment_tab_layout.addWidget(self.equipment_tab_main)
         self.equipment_tab_layout.addWidget(self.equipment_tab_main2)
 
-    def define_event_scene(self):
+    def define_skill_tab(self):
         pass
 
-    def define_skill_tab(self):
+    def define_ritual_tab(self):
         pass
 
     def define_item_tab(self):
@@ -638,12 +749,11 @@ class MyWidget(QMainWindow):
                 self.explore_progress_bar.setValue(new_val)
                 if self.explore_description.text != "":
                     self.explore_description.setText("<p></p>")
-                if random.randint(0, 10000) < 50:
-                    self.start_battle()
+                if random.randint(0, 10000) < 200:
+                    self.start_event()
         else:
             self.explore_progress_bar.setValue(self.explore_rate)
             self.update_status("Explore done.")
-            self.player.tier += 1
         # 更新资源
         self.info_gold.setText(str(self.player.gold))
         self.info_tier.setText(str(self.player.tier))
@@ -656,7 +766,7 @@ class MyWidget(QMainWindow):
         self.bc = BattleController(self.player, self.map_controller.spawn_enemy())
         self.update_battle_scene()
         self.on_battle = True
-        self.battle_scene.setVisible(True)
+        self.center_layout.setCurrentIndex(1)
         self.battle_timer.start(500)
 
     @Slot()
@@ -667,7 +777,6 @@ class MyWidget(QMainWindow):
         if flag:
             if self.player in loser:
                 self.explore_progress_bar.reset()
-                self.player.tier -= 1
             else:
                 reward = self.bc.reward()
                 self.player.get_reward(reward)
@@ -680,8 +789,18 @@ class MyWidget(QMainWindow):
     def end_battle(self):
         self.on_battle = False
         self.battle_timer.stop()
-        self.battle_scene.setVisible(False)
+        self.center_layout.setCurrentIndex(0)
         self.update_item_table()
+
+    def start_event(self):
+        self.current_event = self.map_controller.spawn_event()
+        self.update_event_scene()
+        self.on_event = True
+        self.center_layout.setCurrentIndex(2)
+
+    def end_event(self):
+        self.on_event = False
+        self.center_layout.setCurrentIndex(0)
 
 
 if __name__ == "__main__":
