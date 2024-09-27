@@ -17,14 +17,16 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QTableWidgetItem,
     QTextEdit,
+    QCheckBox,
     QLayoutItem,
 )
-from PySide6.QtCore import QTimer, Qt, Slot
+from PySide6.QtCore import QTimer, Qt, Slot, Signal
 from PySide6.QtGui import QAction
 from dataclasses import dataclass, asdict
 import random
-from typing import Literal, Self, TypeAlias
+from typing import Literal, Self
 from collections import defaultdict
+from functools import partial
 from math import ceil
 
 # qt version of l.py
@@ -274,20 +276,10 @@ class Enemy(Character):
 
 
 class Event:
-    def __init__(self, description: str, options: tuple[dict]) -> None:
+    def __init__(self, description: str, options: dict[str, dict]) -> None:
         self.description: str = description
-        self.options: tuple[dict] = options
-        self.true_options: list[str] = []
-        self.call_backs: list = []
-        for reward in self.options:
-            self.true_options.append(reward["option"])
-            effect: dict = reward["effect"]
-            if "enemy" in effect:
-                enemy = effect["enemy"]
-            if "items" in effect:
-                pass
-            if "equipment" in effect:
-                pass
+        self.options: dict[str, dict] = options
+        self.true_options: list[str] = list(options.keys())
 
 
 class MapController:
@@ -331,40 +323,34 @@ class MapController:
                         "id": 1,
                         "info": {
                             "description": "有个囚犯背对着你，口中念念有词。\n*似乎仍然保留有一定神志。",
-                            "options": [
-                                {
-                                    "option": "上前看看",
-                                    "effect": {
-                                        "enemy": {
-                                            "name": "strange prisoner",
-                                            "spawn_priority": 0,
-                                            "drops": {
-                                                "items": [
-                                                    {
-                                                        "name": "gold",
-                                                        "val": 22,
-                                                        "p": 1.0,
-                                                    },
-                                                    {
-                                                        "name": "arc shard",
-                                                        "val": 1,
-                                                        "p": 1.0,
-                                                    },
-                                                ],
-                                            },
-                                        }
-                                    },
+                            "options": {
+                                "上前看看": {
+                                    "enemy": {
+                                        "name": "strange prisoner",
+                                        "spawn_priority": 0,
+                                        "drops": {
+                                            "items": [
+                                                {
+                                                    "name": "gold",
+                                                    "val": 22,
+                                                    "p": 1.0,
+                                                },
+                                                {
+                                                    "name": "arc shard",
+                                                    "val": 1,
+                                                    "p": 1.0,
+                                                },
+                                            ],
+                                        },
+                                    }
                                 },
-                                {"option": "无视", "effect": {}},
-                                {
-                                    "option": "发起攻击",
-                                    "effect": {
-                                        "items": [
-                                            {"name": "arc shard", "val": 1, "p": 1.0},
-                                        ]
-                                    },
+                                "无视": {},
+                                "发起攻击": {
+                                    "items": [
+                                        {"name": "arc shard", "val": 1, "p": 1.0},
+                                    ]
                                 },
-                            ],
+                            },
                         },
                         "p": 10,
                         "encounter": 0,
@@ -389,26 +375,33 @@ class MapController:
         e_pow: int = level["enemy_base_tier"]
         pool = level["enemys"]
         e = random.choices(pool, [e["spawn_priority"] for e in pool], k=1)[0]
+        return self.enemy_makeup(e, e_pow)
+
+    @classmethod
+    def enemy_makeup(cls, e: dict, e_pow: int):
         reward = {}
-        for i in e["drops"]["items"]:
-            p = i["p"]
-            if random.random() < p:
-                name, val = i["name"], i["val"]
-                item = Items[name]
-                reward[item] = val
-        for i in e["drops"]["equipments"]:
-            p = i["p"]
-            if random.random() < p:
-                name, part, equipment_status, description = (
-                    i["name"],
-                    i["part"],
-                    i["equipment_status"],
-                    i["description"],
-                )
-                equipment = Equipment(
-                    name, part, Equipment_status(**equipment_status), description
-                )
-                reward[equipment] = 1
+        drops = e["drops"]
+        if "items" in drops:
+            for i in drops["items"]:
+                p = i["p"]
+                if random.random() < p:
+                    name, val = i["name"], i["val"]
+                    item = Items[name]
+                    reward[item] = val
+        if "equipments" in drops:
+            for i in drops["equipments"]:
+                p = i["p"]
+                if random.random() < p:
+                    name, part, equipment_status, description = (
+                        i["name"],
+                        i["part"],
+                        i["equipment_status"],
+                        i["description"],
+                    )
+                    equipment = Equipment(
+                        name, part, Equipment_status(**equipment_status), description
+                    )
+                    reward[equipment] = 1
         return Enemy(e["name"], reward, e_pow)
 
 
@@ -554,7 +547,8 @@ class MyWidget(QMainWindow):
         self.center_layout = QStackedLayout(self.center)
 
         # 占位符
-        self.place_holder = QWidget()
+        self.place_holder = QLabel("探索中~")
+        self.place_holder.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # battle scene
         self.battle_scene = QWidget()
@@ -568,7 +562,7 @@ class MyWidget(QMainWindow):
         self.event_scene_layout = QVBoxLayout(self.event_scene)
         self.define_event_scene()
         self.event_timer = QTimer()
-        # self.battle_timer.timeout.connect(self.battle)
+        self.event_timer.timeout.connect(self.force_end_event)
 
         self.center_layout.addWidget(self.place_holder)
         self.center_layout.addWidget(self.battle_scene)
@@ -668,15 +662,20 @@ class MyWidget(QMainWindow):
         self.event_options = QWidget()
         self.event_options_layout = QHBoxLayout(self.event_options)
 
+        self.event_auto_select_check = QCheckBox("自动选择上一次的选择？")
+
         self.event_scene_layout.addWidget(self.event_description)
         self.event_scene_layout.addWidget(self.event_options)
+        self.event_scene_layout.addWidget(self.event_auto_select_check)
+        check: QLayoutItem = self.event_scene_layout.itemAt(2)
+        check.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def update_event_scene(self):
         self.clear_layout(self.event_options_layout)
         self.event_description.setText(self.current_event.description)
-        for i in range(len(self.current_event.options)):
-            btn = QPushButton(f"{self.current_event.options[i]}")
-            btn.clicked.connect(self.end_event)
+        for i in self.current_event.options:
+            btn = QPushButton(i)
+            btn.clicked.connect(partial(self.deal_event, i))
             self.event_options_layout.addWidget(btn)
 
     def define_equipment_tab(self):
@@ -735,6 +734,9 @@ class MyWidget(QMainWindow):
             volumn = QTableWidgetItem(str(vol))
             volumn.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.item_table.setItem(i, 1, volumn)
+        # 更新资源
+        self.info_gold.setText(str(self.player.gold))
+        self.info_tier.setText(str(self.player.tier))
 
     @Slot()
     def global_timer_update(self):
@@ -754,16 +756,16 @@ class MyWidget(QMainWindow):
         else:
             self.explore_progress_bar.setValue(self.explore_rate)
             self.update_status("Explore done.")
-        # 更新资源
-        self.info_gold.setText(str(self.player.gold))
-        self.info_tier.setText(str(self.player.tier))
 
     @Slot()
     def update_status(self, massage: str, delay: int = 1500):
         self.statusBar().showMessage(massage, delay)
 
-    def start_battle(self):
-        self.bc = BattleController(self.player, self.map_controller.spawn_enemy())
+    def start_battle(self, enemy: Enemy = None):
+        if enemy is None:
+            self.bc = BattleController(self.player, self.map_controller.spawn_enemy())
+        else:
+            self.bc = BattleController(self.player, enemy)
         self.update_battle_scene()
         self.on_battle = True
         self.center_layout.setCurrentIndex(1)
@@ -797,9 +799,34 @@ class MyWidget(QMainWindow):
         self.update_event_scene()
         self.on_event = True
         self.center_layout.setCurrentIndex(2)
+        self.event_timer.start(5000)
 
-    def end_event(self):
+    def deal_event(self, option: str):
+        # 处理手动操作
+        callback = self.current_event.options[option]
+        self.force_end_event()
+        for k, v in callback.items():
+            if k == "enemy":
+                self.start_battle(self.map_controller.enemy_makeup(v, 1))
+            if k == "items":
+                reward = {}
+                for i in v:
+                    p = i["p"]
+                    if random.random() < p:
+                        name, val = i["name"], i["val"]
+                        item = Items[name]
+                        reward[item] = val
+                self.player.get_reward(reward)
+                string = "获得："
+                for k, v in reward.items():
+                    string += f"{k.name}*{v}; "
+                self.update_status(string)
+                self.update_item_table()
+
+    def force_end_event(self):
+        # 处理默认操作
         self.on_event = False
+        self.event_timer.stop()
         self.center_layout.setCurrentIndex(0)
 
 
