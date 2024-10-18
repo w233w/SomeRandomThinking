@@ -19,15 +19,20 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QCheckBox,
     QLayoutItem,
+    QTabBar,
+    QStylePainter,
+    QStyleOptionTab,
+    QStyle,
 )
-from PySide6.QtCore import QTimer, Qt, Slot, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QSize, QTimer, Qt, Slot, Signal, QRect, QPoint
+from PySide6.QtGui import QAction, QPaintEvent
 from dataclasses import dataclass, asdict
 import random
 from typing import Literal, Self
 from collections import defaultdict
 from functools import partial
 from math import ceil
+import sqlite3 as sql
 
 # qt version of l.py
 # u play rouge leader, a hidden black magic beginner。
@@ -86,7 +91,7 @@ class Equipment_status:
 @dataclass(frozen=True)
 class Equipment:
     name: str
-    part: Literal["Weapon", "Head", "Body", "Hand", "Leg", "Foot", "Ring"]
+    part: Literal["Weapon", "offhand", "Head", "Body", "Hand", "Leg", "Foot", "Ring"]
     equipment_status: Equipment_status
     description: str = ""
 
@@ -95,6 +100,14 @@ class Equipment:
 class Item:
     name: str
     description: str = ""
+
+
+@dataclass(frozen=True)
+class Gem:
+    name: str
+    description: str
+    element: str
+    power: int
 
 
 Items = {
@@ -282,6 +295,80 @@ class Event:
         self.true_options: list[str] = list(options.keys())
 
 
+# TODO event和enemy应该同时竞争，event招enemy时建议改成存enemy里，用名字招。
+# 或者将enemy视为一个选项的特殊event，如果event只有一个选项就自动选择。
+# 也许battlecontroller可以放在mapcontroller里。
+
+con = sql.connect("wcf.db")
+cur = con.cursor()
+# 表：map,[mapid, name, layer, base_enemy_tier]
+cur.execute(
+    """CREATE TABLE map(
+        name TEXT NOT NULL,
+        layer TEXT NOT NULL,
+        baseEnemyTier INTEGER NOT NULL,
+        PRIMARY KEY(name, layer)
+    )"""
+)
+cur.execute("""INSERT INTO map VALUES ('Jail', '-2', 3)""")
+cur.execute("""INSERT INTO map VALUES ('Jail', '-3', 6)""")
+con.commit()
+# 表：map_connect, [mapid_src, mapid_dst]
+cur.execute(
+    """CREATE TABLE map_connect(
+        map_src INTEGER NOT NULL,
+        map_dst INTEGER NOT NULL
+    )"""
+)
+cur.execute("""INSERT INTO map_connect VALUES (1, 2)""")
+con.commit()
+# 表：enemys,[name, spawn_p]
+# cur.execute(
+#     """CREATE TABLE enemy(
+
+#     )"""
+# )
+# 表：items,[itemid, description]
+cur.execute(
+    """CREATE TABLE item(
+        name TEXT NOT NULL,
+        description TEXT NOT NULL
+    )"""
+)
+cur.execute("""INSERT INTO item VALUES ('gold', 'currency')""")
+cur.execute("""INSERT INTO item VALUES ('white_shard', 'arc energy shard')""")
+con.commit()
+
+
+# 表：equipments,[equpimentid, description, part, 各属性有值就填值，没有就null]
+# 表：enemy_drop,[enemyid, type, dropid] # 每个drop一行
+# 表：enemy-map, [mapid, enemyid]
+# 表：events, [p, require_event, description]
+cur.execute(
+    """CREATE TABLE event(
+        description TEXT NOT NULL,
+        spawn_rate REAL NOT NULL
+    )"""
+)
+cur.execute(
+    """INSERT INTO event VALUES ('有个囚犯背对着你，口中念念有词。\n*似乎仍然保留有一定神志。', 10)"""
+)
+con.commit()
+# 表：events_options: [eventid, optionid, description, trigger(drop/enemy/none...)]
+cur.execute(
+    """CREATE TABLE event_option(
+        event_id INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        trigger TEXT,
+        trigger_id INTEGER
+    )"""
+)
+cur.execute("""INSERT INTO event_option VALUES (1, '上前看看', 'enemy', 1)""")
+cur.execute("""INSERT INTO event_option VALUES (1, '无视', null, null)""")
+cur.execute("""INSERT INTO event_option VALUES (1, '背后偷袭', 'item', 1)""")
+con.commit()
+
+
 class MapController:
     def __init__(self) -> None:
         # with open("./temp2.json") as j:
@@ -347,7 +434,7 @@ class MapController:
                                 "无视": {},
                                 "发起攻击": {
                                     "items": [
-                                        {"name": "arc shard", "val": 1, "p": 1.0},
+                                        {"name": "gold", "val": 10, "p": 1.0},
                                     ]
                                 },
                             },
@@ -441,6 +528,31 @@ class BattleController:
         return self.opponent.drop_reward()
 
 
+class MyTabBar(QTabBar):
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        option = QStyleOptionTab()
+        for index in range(self.count()):
+            self.initStyleOption(option, index)
+            painter.drawControl(QStyle.CE_TabBarTabShape, option)
+            painter.drawText(
+                self.tabRect(index),
+                Qt.AlignCenter | Qt.TextDontClip,
+                self.tabText(index),
+            )
+
+    def tabSizeHint(self, index):
+        size = QTabBar.tabSizeHint(self, index)
+        if size.width() < size.height():
+            size.transpose()
+        return size
+
+
+class EquipmentFloatingWindow(QWidget):
+    def __init__(self, parent: QWidget | None = ..., f: Qt.WindowType = ...) -> None:
+        super().__init__(parent, f)
+
+
 class MyWidget(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -472,14 +584,16 @@ class MyWidget(QMainWindow):
         self.info_tier_label = QLabel("Tier:")
         self.info_tier = QLabel(str(self.player.tier))
 
-        info_group_layout = QGridLayout(info_group)
-        info_group_layout.addWidget(self.info_gold_label, 0, 0)
-        info_group_layout.addWidget(self.info_gold, 0, 1)
-        info_group_layout.addWidget(self.info_tier_label, 0, 2)
-        info_group_layout.addWidget(self.info_tier, 0, 3)
+        info_group_layout = QHBoxLayout(info_group)
+        info_group_layout.addWidget(self.info_gold_label)
+        info_group_layout.addWidget(self.info_gold)
+        info_group_layout.addWidget(self.info_tier_label)
+        info_group_layout.addWidget(self.info_tier)
 
         # 创建标签页控件
         self.tab_widget = QTabWidget()
+        self.tab_widget.setTabBar(MyTabBar())
+        self.tab_widget.setTabPosition(QTabWidget.TabPosition.West)
 
         # map tab
         self.explore_tab = QWidget()
@@ -492,6 +606,7 @@ class MyWidget(QMainWindow):
         self.tab_widget.addTab(self.item_tab, "物品")
 
         # TODO equipment tab
+        # 多级菜单
         self.equipment_tab = QWidget()
         self.define_equipment_tab()
         self.tab_widget.addTab(self.equipment_tab, "装备")
@@ -506,6 +621,11 @@ class MyWidget(QMainWindow):
         self.define_ritual_tab()
         self.tab_widget.addTab(self.ritual_tab, "仪式")
 
+        # TODO voodoo tab
+        self.voodoo_tab = QWidget()
+        self.define_voodoo_tab()
+        self.tab_widget.addTab(self.voodoo_tab, "巫术")
+
         # 设置主布局
         self.global_widget = QWidget()
         global_layout = QVBoxLayout(self.global_widget)
@@ -515,9 +635,12 @@ class MyWidget(QMainWindow):
         self.setCentralWidget(self.global_widget)
 
         # 创建并启动一个定时器
+        self.golbal_timer_speed = 20  # ms
         self.global_timer = QTimer(self)
         self.global_timer.timeout.connect(self.global_timer_update)
-        self.global_timer.start(20)  # 每20毫秒更新一次
+        self.global_timer.start(self.golbal_timer_speed)  # 每20毫秒更新一次
+
+        self.event_auto_speed = 5000
 
     def save(self):
         print(123)
@@ -583,6 +706,7 @@ class MyWidget(QMainWindow):
         self.explore_tab_layout.addWidget(self.center)
         self.explore_tab_layout.addWidget(self.explore_description)
         self.explore_tab_layout.addWidget(self.explore_progress_bar)
+        self.explore_tab_layout.setContentsMargins(1, 1, 1, 1)
 
     def define_battle_scene(self):
         self.name_1 = QLabel()
@@ -707,6 +831,12 @@ class MyWidget(QMainWindow):
     def define_ritual_tab(self):
         pass
 
+    def define_voodoo_tab(self):
+        self.voodoo_tab_layout = QHBoxLayout(self.voodoo_tab)
+
+        l = QLabel("123")
+        self.voodoo_tab_layout.addWidget(l)
+
     def define_item_tab(self):
         self.item_table = QTableWidget()
         self.item_table.setColumnCount(2)
@@ -721,6 +851,7 @@ class MyWidget(QMainWindow):
 
         self.item_tab_layout = QHBoxLayout(self.item_tab)
         self.item_tab_layout.addWidget(self.item_table)
+        self.item_tab_layout.setContentsMargins(1, 1, 1, 1)
 
         self.update_item_table()
 
@@ -799,7 +930,8 @@ class MyWidget(QMainWindow):
         self.update_event_scene()
         self.on_event = True
         self.center_layout.setCurrentIndex(2)
-        self.event_timer.start(5000)
+        self.event_timer.start(self.event_auto_speed)
+        self.event_timer.remainingTime()
 
     def deal_event(self, option: str):
         # 处理手动操作
