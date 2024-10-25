@@ -299,74 +299,74 @@ class Event:
 # 或者将enemy视为一个选项的特殊event，如果event只有一个选项就自动选择。
 # 也许battlecontroller可以放在mapcontroller里。
 
-con = sql.connect("wcf.db")
-cur = con.cursor()
-# 表：map,[mapid, name, layer, base_enemy_tier]
-cur.execute(
-    """CREATE TABLE map(
-        name TEXT NOT NULL,
-        layer TEXT NOT NULL,
-        baseEnemyTier INTEGER NOT NULL,
-        PRIMARY KEY(name, layer)
-    )"""
-)
-cur.execute("""INSERT INTO map VALUES ('Jail', '-2', 3)""")
-cur.execute("""INSERT INTO map VALUES ('Jail', '-3', 6)""")
-con.commit()
-# 表：map_connect, [mapid_src, mapid_dst]
-cur.execute(
-    """CREATE TABLE map_connect(
-        map_src INTEGER NOT NULL,
-        map_dst INTEGER NOT NULL
-    )"""
-)
-cur.execute("""INSERT INTO map_connect VALUES (1, 2)""")
-con.commit()
-# 表：enemys,[name, spawn_p]
+# con = sql.connect("wcf.db")
+# cur = con.cursor()
+# # 表：map,[mapid, name, layer, base_enemy_tier]
 # cur.execute(
-#     """CREATE TABLE enemy(
-
+#     """CREATE TABLE map(
+#         name TEXT NOT NULL,
+#         layer TEXT NOT NULL,
+#         baseEnemyTier INTEGER NOT NULL,
+#         PRIMARY KEY(name, layer)
 #     )"""
 # )
-# 表：items,[itemid, description]
-cur.execute(
-    """CREATE TABLE item(
-        name TEXT NOT NULL,
-        description TEXT NOT NULL
-    )"""
-)
-cur.execute("""INSERT INTO item VALUES ('gold', 'currency')""")
-cur.execute("""INSERT INTO item VALUES ('white_shard', 'arc energy shard')""")
-con.commit()
+# cur.execute("""INSERT INTO map VALUES ('Jail', '-2', 3)""")
+# cur.execute("""INSERT INTO map VALUES ('Jail', '-3', 6)""")
+# con.commit()
+# # 表：map_connect, [mapid_src, mapid_dst]
+# cur.execute(
+#     """CREATE TABLE map_connect(
+#         map_src INTEGER NOT NULL,
+#         map_dst INTEGER NOT NULL
+#     )"""
+# )
+# cur.execute("""INSERT INTO map_connect VALUES (1, 2)""")
+# con.commit()
+# # 表：enemys,[name, spawn_p]
+# # cur.execute(
+# #     """CREATE TABLE enemy(
+
+# #     )"""
+# # )
+# # 表：items,[itemid, description]
+# cur.execute(
+#     """CREATE TABLE item(
+#         name TEXT NOT NULL,
+#         description TEXT NOT NULL
+#     )"""
+# )
+# cur.execute("""INSERT INTO item VALUES ('gold', 'currency')""")
+# cur.execute("""INSERT INTO item VALUES ('white_shard', 'arc energy shard')""")
+# con.commit()
 
 
-# 表：equipments,[equpimentid, description, part, 各属性有值就填值，没有就null]
-# 表：enemy_drop,[enemyid, type, dropid] # 每个drop一行
-# 表：enemy-map, [mapid, enemyid]
-# 表：events, [p, require_event, description]
-cur.execute(
-    """CREATE TABLE event(
-        description TEXT NOT NULL,
-        spawn_rate REAL NOT NULL
-    )"""
-)
-cur.execute(
-    """INSERT INTO event VALUES ('有个囚犯背对着你，口中念念有词。\n*似乎仍然保留有一定神志。', 10)"""
-)
-con.commit()
-# 表：events_options: [eventid, optionid, description, trigger(drop/enemy/none...)]
-cur.execute(
-    """CREATE TABLE event_option(
-        event_id INTEGER NOT NULL,
-        description TEXT NOT NULL,
-        trigger TEXT,
-        trigger_id INTEGER
-    )"""
-)
-cur.execute("""INSERT INTO event_option VALUES (1, '上前看看', 'enemy', 1)""")
-cur.execute("""INSERT INTO event_option VALUES (1, '无视', null, null)""")
-cur.execute("""INSERT INTO event_option VALUES (1, '背后偷袭', 'item', 1)""")
-con.commit()
+# # 表：equipments,[equpimentid, description, part, 各属性有值就填值，没有就null]
+# # 表：enemy_drop,[enemyid, type, dropid] # 每个drop一行
+# # 表：enemy-map, [mapid, enemyid]
+# # 表：events, [p, require_event, description]
+# cur.execute(
+#     """CREATE TABLE event(
+#         description TEXT NOT NULL,
+#         spawn_rate REAL NOT NULL
+#     )"""
+# )
+# cur.execute(
+#     """INSERT INTO event VALUES ('有个囚犯背对着你，口中念念有词。\n*似乎仍然保留有一定神志。', 10)"""
+# )
+# con.commit()
+# # 表：events_options: [eventid, optionid, description, trigger(drop/enemy/none...)]
+# cur.execute(
+#     """CREATE TABLE event_option(
+#         event_id INTEGER NOT NULL,
+#         description TEXT NOT NULL,
+#         trigger TEXT,
+#         trigger_id INTEGER
+#     )"""
+# )
+# cur.execute("""INSERT INTO event_option VALUES (1, '上前看看', 'enemy', 1)""")
+# cur.execute("""INSERT INTO event_option VALUES (1, '无视', null, null)""")
+# cur.execute("""INSERT INTO event_option VALUES (1, '背后偷袭', 'item', 1)""")
+# con.commit()
 
 
 class MapController:
@@ -807,23 +807,15 @@ class MyWidget(QMainWindow):
 
         self.equipment_tab_main = QWidget()
         self.equipment_tab_main_layout = QGridLayout(self.equipment_tab_main)
-        for r in range(2):
-            for c in range(5):
-                btn = QPushButton("1")
-                btn.setMaximumSize(20, 20)
+        self.equipment_tab_main_layout.setSpacing(0)
+        self.equipment_tab_main_layout.setContentsMargins(0, 0, 0, 0)
+        for r in range(8):
+            for c in range(8):
+                btn = QPushButton("测试" + "1" * c, self.equipment_tab_main)
                 self.equipment_tab_main_layout.addWidget(btn, r, c)
-
-        self.equipment_tab_main2 = QWidget()
-        self.equipment_tab_main_layout2 = QGridLayout(self.equipment_tab_main2)
-        for r in range(2):
-            for c in range(5):
-                btn = QPushButton("1")
-                btn.setMaximumSize(20, 20)
-                self.equipment_tab_main_layout2.addWidget(btn, r, c)
 
         self.equipment_tab_layout = QVBoxLayout(self.equipment_tab)
         self.equipment_tab_layout.addWidget(self.equipment_tab_main)
-        self.equipment_tab_layout.addWidget(self.equipment_tab_main2)
 
     def define_skill_tab(self):
         pass
