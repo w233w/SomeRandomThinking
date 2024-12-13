@@ -1,340 +1,347 @@
-from abc import abstractmethod
-from itertools import product
+from __future__ import annotations
+import sys
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
+    QStackedLayout,
+    QGridLayout,
+    QProgressBar,
+    QTabWidget,
+    QGroupBox,
+    QPushButton,
+    QMenu,
+    QTableWidget,
+    QHeaderView,
+    QTableWidgetItem,
+    QTextEdit,
+    QCheckBox,
+    QLayout,
+    QLayoutItem,
+    QTabBar,
+    QStylePainter,
+    QStyleOptionTab,
+    QStyle,
+    QSpacerItem,
+    QSizePolicy,
+    QSpinBox,
+)
+from PySide6.QtCore import (
+    QSize,
+    QTimer,
+    Qt,
+    Slot,
+    Signal,
+    QRect,
+    QPoint,
+    QFile,
+    QMetaObject,
+)
+from PySide6.QtGui import QAction, QPaintEvent, QPalette
+from PySide6.QtUiTools import QUiLoader
+from dataclasses import dataclass, asdict, Field
 import random
-from typing import Optional
-import pygame
-from pygame.math import Vector2
-import numpy as np
+from typing import Any, AnyStr, Literal, Self, Optional, Union
+from collections import defaultdict
+from functools import partial
+from math import ceil
+import sqlite3 as sql
+import os
+import json
+import uuid
+from enum import Enum
 
-cancel = pygame.event.custom_type()
-
-
-class Tower(pygame.sprite.Sprite):
-    def __init__(self, coord: tuple[int, int], *groups) -> None:
-        super().__init__(*groups)
-        self.coord = coord
-        self.pos = Vector2(10 + 20 * self.coord[0], 10 + 20 * self.coord[1])
-        self.image: pygame.Surface = pygame.Surface([20, 20])
-        self.image.set_colorkey([0, 0, 0])
-        self.rect: pygame.Rect = self.image.get_rect(center=self.pos)
-        self.render()
-
-    @abstractmethod
-    def render(self): ...
+# 空间戒指挂机
+# 空间戒指有1米见方的空间，每5秒生成一个1厘米见方的空间原石
+# 空间原石可以兑换等比例空间，或者log级减少升级戒指来减少生成时间，或者攒满1米见方换一个戒指
+# 戒指可以套戒指，每个空间最多有两个戒指。
 
 
-class Cannon(Tower):
-    def __init__(self, coord: tuple[int, int], *groups) -> None:
-        super().__init__(coord, *groups)
-        self.target: Optional[Enemy] = None
-        self.last_shoot = 0
-        self.shoot_interval = 500
-
-    def render(self):
-        pygame.draw.circle(self.image, [1, 1, 1], Vector2(10), 10)
-
-    def update(self, *args, **kwargs) -> None:
-        delta = kwargs["delta"]
-        self.last_shoot += delta
-        if self.last_shoot > self.shoot_interval and self.target:
-            Bullet(self.pos, self.target, bs)
-            self.last_shoot -= self.shoot_interval
-        elif not self.target:
-            self.last_shoot = 0
-        if self.target not in es:
-            for enemy in es:
-                if self.pos.distance_to(enemy.pos) < 40:
-                    self.target = enemy
-
-
-class Enemy(pygame.sprite.Sprite):
-    color = {
-        1: [255, 0, 0],
-        2: [0, 255, 0],
-        3: [0, 0, 255],
-        4: [0, 255, 255],
-        5: [255, 255, 0],
-    }
-
-    def __init__(self, pos: Vector2, tier: int, *groups) -> None:
-        super().__init__(*groups)
-        self.tier = tier
-        self.pos = Vector2(pos)
-        self.image: pygame.Surface = pygame.Surface([10, 10])
-        self.image.set_colorkey([0, 0, 0])
-        self.rect: pygame.Rect = self.image.get_rect(center=self.pos)
-        pygame.draw.circle(self.image, Enemy.color[self.tier], [5, 5], 5)
-
-    def update(self, *args, **kwargs) -> None:
-        flow_map = kwargs["flow_map"]
-        coord = self.pos / 20
-        if self.pos.x < 20 and self.pos.y < 20:
-            self.kill()
-        x, y = coord
-        low_x, high_x = x - 0.5, x + 0.5
-        low_y, high_y = y - 0.5, y + 0.5
-        center_x, center_y = int(high_x), int(high_y)
-        move_to = Vector2(0)
-        for reference in [
-            (low_x, low_y),
-            (low_x, high_y),
-            (high_x, low_y),
-            (high_x, high_y),
-        ]:
-            x, y = reference
-            weight = abs(center_x - x) * abs(center_y - y)
-            try:
-                ref = flow_map[int(y)][int(x)]
-            except:
-                ref = Vector2(0)
-            if ref == Vector2(0):
-                _x = int(x) + 0.5
-                _y = int(y) + 0.5
-                ref = Vector2(self.pos) - Vector2(_x, _y) * 20
-                ref.normalize_ip()
-            move_to += ref * weight
-        if move_to != Vector2(0):
-            move_to.normalize_ip()
-        self.pos += move_to * (10 + 5 * self.tier) * (kwargs["delta"] / 1000)
-        self.rect.center = self.pos
-
-    def render(self):
-        pygame.draw.circle(self.image, Enemy.color[self.tier], [5, 5], 5)
-
-
-class Bullet(pygame.sprite.Sprite):
-    def __init__(self, pos: Vector2, target: Enemy, *groups) -> None:
-        super().__init__(*groups)
-        self.remain = 300  # ms
-        self.pos = Vector2(pos)
-        self.target = target
-        self.image: pygame.Surface = pygame.Surface([6, 6])
-        self.image.set_colorkey([0, 0, 0])
-        self.rect: pygame.Rect = self.image.get_rect(center=self.pos)
-        pygame.draw.circle(self.image, [1, 1, 1], [3, 3], 2)
-
-    def update(self, *args, **kwargs) -> None:
-        global gold
-        delta: int = kwargs["delta"]
-        self.remain -= delta
-        if es.has(self.target):
-            if self.remain <= 0:
-                self.kill()
-                self.target.tier -= 1
-                if self.target.tier < 1:
-                    self.target.kill()
-                    gold += 1
-                else:
-                    self.target.render()
-                return
-            to = self.target.pos - self.pos
-            to = to * delta / self.remain
-            self.pos += to
-            self.rect.center = self.pos
+class RingNode:
+    def __init__(
+        self,
+        parent: Optional[RingNode] = None,
+        level: int = 0,
+        ms_pass: int = 0,
+        space: int = 10000,
+        gem: int = 0,
+        left: dict = {},
+        right: dict = {},
+        modifier: dict = {},
+    ) -> None:
+        self.id = uuid.uuid4()
+        self.parent = parent  # 父戒指，主空间的戒指没有父戒指
+        self.level = level  # 等级
+        self.ms_pass = ms_pass  # 距离上次生产已过去的毫秒数
+        self.space = space  # 最大空间
+        self.gem = gem  # 宝石量
+        if left:
+            self.left = RingNode(self, **left)  # 空间内嵌套的戒指1
         else:
-            self.kill()
+            self.left = None
+        if right:
+            self.right = RingNode(self, **right)  # 空间内嵌套的戒指2
+        else:
+            self.right = None
+        self.modifier = modifier  # 独立升级
+
+    def update(self, delta: int) -> None:
+        if self.parent:
+            self.ms_pass += delta
+            ms_require = self.ms_require
+            if self.ms_pass >= ms_require:
+                if self.depth == 1:  # 主空间戒指
+                    self.gem = min(self.gem + self.ms_pass // ms_require, self.space)
+                    self.ms_pass -= ms_require * self.ms_pass // ms_require
+                elif self.depth > 1 and self.parent.gem > 0:  # 非主空间戒指
+                    self.gem = min(self.gem + 1, self.space)
+                    self.parent.gem -= 1
+                    self.ms_pass -= ms_require
+                else:  # 有父戒指，但父戒指没有宝石了，维持即将生产的状态
+                    self.ms_pass = ms_require
+        if self.left:
+            self.left.update(delta)
+        if self.right:
+            self.right.update(delta)
+
+    @property
+    def depth(self) -> int:
+        if self.parent:
+            return self.parent.depth + 1
+        else:
+            return 0
+
+    @property
+    def ms_require(self) -> int:
+        return ceil(3000 / (1 + 0.01 * self.level))
+
+    def can_level_up(self) -> bool:
+        if not self.parent:
+            return False
+        return self.gem >= self.level + 1
+
+    def level_up(self) -> None:
+        self.gem -= self.level + 1
+        self.level += 1
+
+    def can_expend_with(self, n: int) -> bool:
+        if not self.parent:
+            return False
+        return self.gem >= n
+
+    def expend(self, n: int) -> None:
+        self.gem -= n
+        self.space += n
+
+    def as_dict(self) -> dict[str, Any]:
+        d = {
+            "level": self.level,
+            "ms_pass": self.ms_pass,
+            "space": self.space,
+            "gem": self.gem,
+            "left": self.left.as_dict() if self.left else None,
+            "right": self.right.as_dict() if self.right else None,
+        }
+        return d
 
 
-class MapController:
+class GlobalModifier:
+    """大多是全局生效的buff，或者是否解锁某个功能的标志位"""
+
     def __init__(self) -> None:
-        # 0 for pass, 1 for tower base, 2 for obstacles, 3 for base, 4 for enemy spawn,
-        self.map = np.array(
-            [
-                [3, 1, 0, 0, 0, 0, 1, 0, 0, 0],
-                [0, 1, 0, 2, 1, 0, 1, 0, 1, 0],
-                [0, 1, 0, 2, 0, 0, 1, 0, 1, 0],
-                [0, 2, 0, 2, 0, 1, 2, 0, 1, 0],
-                [0, 2, 0, 2, 0, 0, 2, 0, 2, 0],
-                [0, 2, 0, 2, 0, 0, 2, 0, 2, 0],
-                [0, 1, 0, 2, 1, 0, 2, 0, 2, 0],
-                [0, 1, 0, 1, 0, 0, 2, 0, 1, 0],
-                [0, 1, 0, 1, 0, 1, 2, 0, 1, 0],
-                [0, 0, 0, 1, 0, 0, 0, 0, 1, 4],
-            ],
-            dtype=np.int8,
+        pass
+
+
+class RingTree:
+    def __init__(self) -> None:
+        if os.path.exists("save.json"):
+            with open("save.json", "r") as f:
+                data = json.load(f)
+                self.root = RingNode(None, **data["rings"])
+        else:
+            self.root = RingNode(None)
+            self.root.left = RingNode(self.root)
+        self.current_visit = self.root
+
+    def save(self) -> None:
+        res = self.root.as_dict()
+        with open("save.json", "w") as f:
+            json.dump({"rings": res}, f, indent=4, ensure_ascii=False)
+
+    def update(self, delta: int) -> None:
+        self.root.update(delta)
+
+
+class CardView(QWidget):
+    def __init__(self, parent) -> None:
+        super().__init__(parent)
+        self.gridLayout = QGridLayout(self)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+
+        self.name = QLabel("Ring", self)
+        self.name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gridLayout.addWidget(self.name, 0, 0, 1, 3)
+
+        self.space_hint = QLabel("容量", self)
+        self.gridLayout.addWidget(self.space_hint, 4, 0, 1, 1)
+
+        self.level = QLabel("等级:", self)
+        self.gridLayout.addWidget(self.level, 1, 0, 1, 1)
+
+        self.space = QLabel("空间升级", self)
+        self.space.setToolTip("使用等量的宝石交换等量的空间")
+        self.gridLayout.addWidget(self.space, 3, 0, 1, 1)
+
+        self.produce_hint = QLabel("生产", self)
+        self.gridLayout.addWidget(self.produce_hint, 7, 0, 1, 1)
+
+        self.space_upgrade_spin = QSpinBox(self)
+        self.space_upgrade_spin.setRange(1, 10000)
+        self.gridLayout.addWidget(self.space_upgrade_spin, 3, 1, 1, 1)
+
+        self.space_upgrade = QPushButton("升级", self)
+        self.gridLayout.addWidget(self.space_upgrade, 3, 2, 1, 1)
+
+        self.level_upgrade = QPushButton("升级", self)
+        self.level_upgrade.setToolTip("升级需要等级数加1的宝石")
+        self.gridLayout.addWidget(self.level_upgrade, 1, 2, 1, 1)
+
+        self.spaceBar = QProgressBar(self)
+        self.spaceBar.setStyleSheet("QProgressBar::chunk{background:red}")
+        self.spaceBar.setValue(24)
+        self.spaceBar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.spaceBar.setTextVisible(False)
+        self.gridLayout.addWidget(self.spaceBar, 5, 0, 1, 3)
+
+        self.produceBar = QProgressBar(self)
+        self.produceBar.setValue(24)
+        self.produceBar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gridLayout.addWidget(self.produceBar, 8, 0, 1, 3)
+
+        self.produce_time = QLabel("5 s", self)
+        self.produce_time.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.gridLayout.addWidget(self.produce_time, 7, 2, 1, 1)
+
+        self.space_verbose = QLabel("10000/10000", self)
+        self.space_verbose.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.gridLayout.addWidget(self.space_verbose, 4, 2, 1, 1)
+
+        self.old_linka: Optional[QMetaObject.Connection] = None
+        self.old_linkb: Optional[QMetaObject.Connection] = None
+
+    def update(self, node: RingNode):
+        self.produce_time.setText(f"{node.ms_require/1000:.2f} s")
+        if node.ms_require <= 1000:
+            self.produceBar.setRange(0, 1)
+            self.produceBar.setValue(1)
+            self.produceBar.setFormat(f"{1000 / node.ms_require:.2f} /s")
+        else:
+            self.produceBar.setRange(0, node.ms_require)
+            self.produceBar.setValue(node.ms_pass)
+        self.level_upgrade.setDisabled(not node.can_level_up())
+        if self.old_linka:
+            self.level_upgrade.pressed.disconnect(self.old_linka)
+        self.old_linka = self.level_upgrade.pressed.connect(node.level_up)
+
+        self.space_verbose.setText(f"{node.gem} / {node.space}")
+        self.spaceBar.setRange(0, node.space)
+        self.spaceBar.setValue(node.gem)
+        self.space_upgrade.setDisabled(
+            not node.can_expend_with(self.space_upgrade_spin.value())
         )
-        self.map = np.array(
-            [
-                [3, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 1, 0, 1, 2, 2, 2, 1, 1, 0],
-                [0, 1, 0, 1, 0, 0, 0, 0, 1, 0],
-                [0, 2, 0, 2, 0, 1, 1, 0, 1, 0],
-                [0, 2, 0, 2, 0, 2, 1, 0, 2, 0],
-                [0, 2, 0, 1, 0, 4, 1, 0, 2, 0],
-                [0, 1, 0, 1, 2, 2, 1, 0, 1, 0],
-                [0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
-                [0, 1, 1, 1, 2, 2, 2, 1, 1, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            ],
-            dtype=np.int8,
+        if self.old_linkb:
+            self.space_upgrade.pressed.disconnect(None)
+        self.old_linkb = self.space_upgrade.pressed.connect(
+            partial(node.expend, self.space_upgrade_spin.value())
         )
-        self.map2 = np.array(
-            [
-                [3, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                [1, 0, 0, 1, 0, 0, 2, 0, 0, 1],
-                [0, 0, 2, 0, 0, 2, 0, 0, 1, 0],
-                [0, 2, 0, 0, 1, 0, 0, 2, 0, 0],
-                [0, 0, 0, 1, 0, 0, 1, 0, 0, 0],
-                [0, 0, 2, 0, 0, 2, 0, 0, 2, 0],
-                [0, 1, 0, 0, 2, 0, 0, 1, 0, 0],
-                [1, 0, 0, 1, 0, 0, 2, 0, 0, 1],
-                [0, 0, 1, 0, 0, 1, 0, 0, 2, 4],
-                [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-            ],
-            dtype=np.int8,
-        )
-        self.map_mask = self.map == 2
 
-        self.lowest = (0, 0)
+        self.level.setText(f"等级: {node.level}")
 
-        self.heat_map = self.gen_heat_map()
-        self.flow_map = self.gen_flow_map()
 
-    # easy bfs
-    def gen_heat_map(self):
-        all_possible = list(product(range(10), range(10)))
-        heat_map = np.full_like(self.map, fill_value=127, dtype=np.int8)
-        heat_map[self.lowest[0]][self.lowest[1]] = 0
-        visited = []
-        queue: list[tuple[int, int]] = [self.lowest]
-        while queue:
-            node = queue.pop(0)
-            visited.append(node)
-            x, y = node
-            for direction in [[0, 1], [0, -1], [1, 0], [-1, 0]]:
-                new_x = x + direction[0]
-                new_y = y + direction[1]
-                if (
-                    (new_x, new_y) in all_possible
-                    and (new_x, new_y) not in visited
-                    and not self.map_mask[new_x][new_y]
-                ):
-                    heat_map[new_x][new_y] = heat_map[x][y] + 1
-                    queue.append((new_x, new_y))
-        return heat_map
+class Application(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Test")
+        self.statusBar().clearMessage()
 
-    # easy trivisal
-    def gen_flow_map(self):
-        all_possible = list(product(range(10), range(10)))
-        flow_map = np.full([10, 10], fill_value=None, dtype=pygame.Vector2)
-        for x, y in all_possible:
-            lr, ud = 0, 0
-            v = self.heat_map[x][y]
-            if v == 127:
-                flow_map[x][y] = Vector2(0)
-                continue
-            for ab in (1, -1):
-                if (x + ab, y) in all_possible and self.heat_map[x + ab, y] < v:
-                    lr += ab
-                if (x, y + ab) in all_possible and self.heat_map[x, y + ab] < v:
-                    ud += ab
-            res = [ud, lr]
+        self.tree = RingTree()
 
-            v = Vector2(res)
-            if v != Vector2(0):
-                v.normalize_ip()
-            flow_map[x][y] = v
-        return flow_map
+        # set menu
+        game_menu = QMenu("Game", self)
+        save = QAction("save", game_menu)
+        save.triggered.connect(self.save)
+        game_menu.addAction(save)
+        ext = QAction("Exit", game_menu)
+        ext.triggered.connect(self.close)
+        game_menu.addAction(ext)
+        self.menuBar().addMenu(game_menu)
 
-    def update_flow_map(self):
-        self.map_mask = self.map == 2
-        self.heat_map = self.gen_heat_map()
-        self.flow_map = self.gen_flow_map()
+        # 创建标签页控件
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabPosition(QTabWidget.TabPosition.West)
 
-    def show_flow_map(self):
-        flow_map = np.full_like(self.map, "", dtype=np.str_)
-        for x, y in product(range(10), range(10)):
-            if self.flow_map[x][y] == Vector2(0):
-                flow_map[x][y] = "·"
-            if self.flow_map[x][y] == Vector2(0, 1):
-                flow_map[x][y] = "↓"
-            if self.flow_map[x][y] == Vector2(0, -1):
-                flow_map[x][y] = "↑"
-            if self.flow_map[x][y] == Vector2(1, 0):
-                flow_map[x][y] = "→"
-            if self.flow_map[x][y] == Vector2(-1, 0):
-                flow_map[x][y] = "←"
-            if self.flow_map[x][y] == Vector2(1, 1):
-                flow_map[x][y] = "↘"
-            if self.flow_map[x][y] == Vector2(1, -1):
-                flow_map[x][y] = "↗"
-            if self.flow_map[x][y] == Vector2(-1, 1):
-                flow_map[x][y] = "↙"
-            if self.flow_map[x][y] == Vector2(-1, -1):
-                flow_map[x][y] = "↖"
-        print(flow_map)
+        # map tab
+        self.space_tab = QWidget()
+        self.define_space_tab()
+        self.tab_widget.addTab(self.space_tab, "空间")
+
+        # 设置主布局
+        self.global_widget = QWidget()
+        global_layout = QVBoxLayout(self.global_widget)
+        global_layout.addWidget(self.tab_widget)
+
+        self.setCentralWidget(self.global_widget)
+
+        # 创建并启动一个定时器
+        self.golbal_timer_speed = 20  # ms
+        self.global_timer = QTimer(self)
+        self.global_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.global_timer.timeout.connect(self.global_timer_update)
+        self.global_timer.setInterval(self.golbal_timer_speed)
+        self.global_timer.start()  # 每20毫秒更新一次
+
+    def define_space_tab(self):
+        """设计两个组件，一个面包屑，一个HboxLayout基于data展示最多两个card，每个card里有进度条"""
+        self.面包屑 = QWidget()
+
+        self.ring_view = QWidget()
+        self.ring_view_layout = QHBoxLayout(self.ring_view)
+
+        self.ring_view_left = CardView(self.ring_view)
+
+        self.ring_view_right = CardView(self.ring_view)
+
+        self.space_tab_layout = QHBoxLayout(self.space_tab)
+        self.space_tab_layout.addWidget(self.ring_view_left)
+        self.space_tab_layout.addWidget(self.ring_view_right)
+
+    def update_space_tab(self):
+        node = self.tree.current_visit
+        if node.left:
+            self.ring_view_left.setVisible(True)
+            self.ring_view_left.update(node.left)
+        else:
+            self.ring_view_left.setVisible(False)
+        if node.right:
+            self.ring_view_right.setVisible(True)
+            self.ring_view_right.update(node.right)
+        else:
+            self.ring_view_right.setVisible(False)
+
+    def global_timer_update(self):
+        self.tree.update(20)
+        self.update_space_tab()
+
+    def save(self):
+        self.tree.save()
+        self.statusBar().showMessage("Save 完成.", 5000)
 
 
 if __name__ == "__main__":
-    controller = MapController()
-
-    pygame.init()
-    scene = pygame.display.set_mode((200, 200))
-    pygame.display.set_caption("TD")
-    clock = pygame.time.Clock()
-
-    ts = pygame.sprite.Group()
-    es = pygame.sprite.Group()
-    last_e = 1000
-    bs = pygame.sprite.Group()
-
-    obstacles = pygame.Surface([20, 20])
-    obstacles.fill([192, 192, 192])
-    tower_base = pygame.Surface([20, 20])
-    tower_base.fill([240, 240, 240])
-    base = pygame.Surface([20, 20])
-    base.fill([0, 255, 0])
-    enemy_spawn = pygame.Surface([20, 20])
-    enemy_spawn.fill([255, 0, 0])
-
-    gold = 20
-    speed = 1
-
-    while True:
-        delta = clock.tick(60)
-        pygame.display.set_caption(f"{gold}")
-        scene.fill([255, 255, 255])
-        events = pygame.event.get()
-        for event in events:
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-            if event.type == pygame.MOUSEBUTTONDOWN and event.dict["button"] == 1:
-                mouse_pos: tuple[int, int] = event.dict["pos"]
-                x, y = mouse_pos
-                x = x // 20
-                y = y // 20
-                if controller.map[y][x] == 1 and gold >= 10:
-                    gold -= 10
-                    controller.map[y][x] = 2
-                    Cannon((x, y), ts)
-                    controller.update_flow_map()
-
-        for _ in range(speed):  # 倍速
-            last_e += delta
-            if last_e > 1000:
-                Enemy(
-                    Vector2(180) + Vector2(random.random() * 20, random.random() * 20),
-                    5,
-                    es,
-                )
-                last_e -= 1000
-            ts.update(delta=delta / speed)
-            es.update(flow_map=controller.flow_map, delta=delta)
-            bs.update(delta=delta / speed)
-
-        for i, r in enumerate(controller.map):
-            for j, c in enumerate(r):
-                if c == 2:
-                    scene.blit(obstacles, [20 * j, 20 * i])
-                elif c == 1:
-                    scene.blit(tower_base, [20 * j, 20 * i])
-                elif c == 3:
-                    scene.blit(base, [20 * j, 20 * i])
-                elif c == 4:
-                    scene.blit(enemy_spawn, [20 * j, 20 * i])
-
-        ts.draw(scene)
-        es.draw(scene)
-        bs.draw(scene)
-        pygame.display.flip()
+    app = QApplication(sys.argv)
+    window = Application()
+    window.show()
+    app.exec()
