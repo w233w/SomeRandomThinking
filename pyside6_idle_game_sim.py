@@ -39,41 +39,35 @@ from PySide6.QtCore import (
     QPoint,
     QFile,
     QMetaObject,
+    QObject,
 )
 from PySide6.QtGui import QAction, QCloseEvent, QPaintEvent, QPalette
-from PySide6.QtUiTools import QUiLoader
-from dataclasses import dataclass, asdict, Field
 import random
-from typing import Any, AnyStr, Literal, Self, Optional, Union
+from typing import Any, AnyStr, Literal, Self, Optional, Union, overload
 from collections import defaultdict
 from functools import partial
 from math import ceil
-import sqlite3 as sql
 import os
 import json
 import uuid
-from enum import Enum
 
-# 空间戒指挂机
-# 空间戒指内有空间，每几秒生成一个空间原石
-# 空间原石可以兑换等比例空间，或者log级减少升级戒指来减少生成时间，或者攒满一定量换一个戒指
-# 戒指可以套戒指，每个空间最多有两个戒指。
+from numpy import isin
 
 
-class RingNode:
+class RingNode(QObject):
     def __init__(
         self,
-        parent: Optional[RingNode] = None,
+        father: Optional[RingNode] = None,
         level: int = 0,
         ms_pass: int = 0,
         space: int = 100,
         gem: int = 0,
         left: dict = {},
         right: dict = {},
-        modifier: dict = {},
     ) -> None:
+        super().__init__(None)
         self.id = uuid.uuid4()
-        self.parent = parent  # 父戒指，主空间的戒指没有父戒指
+        self.father = father  # 父戒指，主空间的戒指没有父戒指
         self.level = level  # 等级
         self.ms_pass = ms_pass  # 距离上次生产已过去的毫秒数
         self.space = space  # 最大空间
@@ -86,19 +80,18 @@ class RingNode:
             self.right = RingNode(self, **right)  # 空间内嵌套的戒指2
         else:
             self.right = None
-        self.modifier = modifier  # 独立升级
 
     def update(self, delta: int) -> None:
-        if self.parent:
+        if self.father:
             self.ms_pass += delta
             ms_require = self.ms_require
             if self.ms_pass >= ms_require:
                 if self.depth == 1:  # 主空间戒指
                     self.gem = min(self.gem + self.ms_pass // ms_require, self.space)
                     self.ms_pass -= ms_require * self.ms_pass // ms_require
-                elif self.depth > 1 and self.parent.gem > 0:  # 非主空间戒指
+                elif self.depth > 1 and self.father.gem > 0:  # 非主空间戒指
                     self.gem = min(self.gem + 1, self.space)
-                    self.parent.gem -= 1
+                    self.father.gem -= 1
                     self.ms_pass -= ms_require
                 else:  # 有父戒指，但父戒指没有宝石了，维持即将生产的状态
                     self.ms_pass = ms_require
@@ -109,29 +102,31 @@ class RingNode:
 
     @property
     def depth(self) -> int:
-        if self.parent:
-            return self.parent.depth + 1
+        if self.father:
+            return self.father.depth + 1
         else:
             return 0
 
     @property
     def ms_require(self) -> int:
-        return ceil(3000 / (1 + 0.01 * self.level))
+        return ceil(3000 / (1 + 0.01 * self.level)) * (4 ** (self.depth - 1))
 
     def can_level_up(self) -> bool:
-        if not self.parent:
+        if not self.father:
             return False
         return self.gem >= self.level + 1
 
+    @Slot()
     def level_up(self) -> None:
         self.gem -= self.level + 1
         self.level += 1
 
     def can_expend_with(self, n: int) -> bool:
-        if not self.parent:
+        if not self.father:
             return False
         return self.gem >= n
 
+    @Slot(int)
     def expend(self, n: int) -> None:
         self.gem -= n
         self.space += n
@@ -166,22 +161,6 @@ class GlobalModifier:
         pass
 
 
-class RingTree:
-    def __init__(self, data: Optional[dict]) -> None:
-        if data:
-            self.root = RingNode(**data)
-        else:
-            self.root = RingNode(None)
-            self.root.left = RingNode(self.root)
-        self.current_visit = self.root
-
-    def save(self) -> dict:
-        return self.root.as_dict()
-
-    def update(self, delta: int) -> None:
-        self.root.update(delta)
-
-
 class UnlockList:
     def __init__(self, **kwargs) -> None:
         self.can_new = kwargs.get("can_new", False)
@@ -194,45 +173,67 @@ class UnlockList:
         }
 
 
-class Data:
+class Data(QObject):
     def __init__(self) -> None:
+        super().__init__(None)
         if os.path.exists("save.json"):
             with open("save.json", "r") as f:
                 data = json.load(f)
                 self.unlock = UnlockList(**data["unlocks"])
-                self.tree = RingTree(data["rings"])
+                self.root = RingNode(**data["rings"])
         else:
             self.unlock = UnlockList()
-            self.tree = RingTree(None)
+            self.root = RingNode(None)
+            self.root.left = RingNode(self.root)
+        self.current_visit = self.root
 
     def save(self) -> None:
         with open("save.json", "w") as f:
             json.dump(
                 {
                     "unlocks": self.unlock.save(),
-                    "rings": self.tree.save(),
+                    "rings": self.root.as_dict(),
                 },
                 f,
                 indent=4,
                 ensure_ascii=False,
             )
 
+    def enter_node(self, node: RingNode) -> None:
+        self.current_visit = node
+
     def update(self, delta: int) -> None:
-        self.tree.update(delta)
+        self.root.update(delta)
 
 
 class CardView(QWidget):
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, node: Optional[RingNode]) -> None:
         super().__init__(parent)
+
+        self.node: Optional[RingNode] = node
+
+        self.parent: Application = parent
+
+        self.setVisible(bool(self.node))
+
         self.gridLayout = QGridLayout(self)
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.back = QPushButton("Back", self)
+        if self.node:
+            self.back.setEnabled(bool(self.node.father) and self.node.father.depth > 0)
+        self.back.clicked.connect(self.back_btn)
+        self.gridLayout.addWidget(self.back, 0, 0, 1, 1)
 
         self.name = QLabel("Ring", self)
         self.name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.gridLayout.addWidget(self.name, 0, 1, 1, 1)
 
         self.enter = QPushButton("Enter", self)
-        self.enter.setVisible(False)
+        if self.node:
+            self.enter.setEnabled(bool(self.node.left or self.node.right))
+        self.enter.clicked.connect(self.enter_btn)
         self.gridLayout.addWidget(self.enter, 0, 2, 1, 1)
 
         self.space_hint = QLabel("容量", self)
@@ -253,14 +254,15 @@ class CardView(QWidget):
         self.gridLayout.addWidget(self.space_upgrade_spin, 3, 1, 1, 1)
 
         self.new_ring = QPushButton("制造", self)
-        self.new_ring.setVisible(False)
-        self.gridLayout.addWidget(self.new_ring, 3, 1, 1, 1)
+        self.gridLayout.addWidget(self.new_ring, 4, 1, 1, 1)
 
         self.space_upgrade = QPushButton("升级", self)
+        self.space_upgrade.pressed.connect(self.space_up)
         self.gridLayout.addWidget(self.space_upgrade, 3, 2, 1, 1)
 
         self.level_upgrade = QPushButton("升级", self)
         self.level_upgrade.setToolTip("升级需要等级数加1的宝石")
+        self.level_upgrade.pressed.connect(self.level_up)
         self.gridLayout.addWidget(self.level_upgrade, 1, 2, 1, 1)
 
         self.spaceBar = QProgressBar(self)
@@ -275,51 +277,56 @@ class CardView(QWidget):
         self.produceBar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.gridLayout.addWidget(self.produceBar, 8, 0, 1, 3)
 
-        self.produce_time = QLabel("5 s", self)
+        self.produce_time = QLabel("5.000 s", self)
         self.produce_time.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.gridLayout.addWidget(self.produce_time, 7, 2, 1, 1)
 
-        self.space_verbose = QLabel("10000/10000", self)
+        self.space_verbose = QLabel("100/100", self)
         self.space_verbose.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.gridLayout.addWidget(self.space_verbose, 4, 2, 1, 1)
 
-        self.old_linka: Optional[QMetaObject.Connection] = None
-        self.old_linkb: Optional[QMetaObject.Connection] = None
+    def new_node(self, node: Optional[RingNode]) -> None:
+        self.node = node
+        self.setVisible(bool(self.node))
+        if self.node:
+            self.back.setEnabled(bool(self.node.father) and self.node.father.depth > 0)
+            self.enter.setEnabled(bool(self.node.left or self.node.right))
 
-    def enable_enter(self) -> None:
-        self.enter.setVisible(True)
+    def back_btn(self) -> None:
+        if self.node and self.node.father and self.node.father.depth > 0:
+            self.parent.enter_new_node(self.node.father.father)
 
-    def enable_new(self) -> None:
-        self.new_ring.setVisible(True)
+    def enter_btn(self) -> None:
+        self.parent.enter_new_node(self.node)
 
-    def update(self, node: RingNode) -> None:
-        self.produce_time.setText(f"{node.ms_require/1000:.4f} s")
-        if node.ms_require <= 1000:
-            self.produceBar.setRange(0, 1)
-            self.produceBar.setValue(1)
-            self.produceBar.setFormat(f"{1000 / node.ms_require:.2f} /s")
-        else:
-            self.produceBar.setRange(0, node.ms_require)
-            self.produceBar.setValue(node.ms_pass)
-        self.level_upgrade.setDisabled(not node.can_level_up())
-        if self.old_linka:
-            self.level_upgrade.pressed.disconnect(self.old_linka)
-        self.old_linka = self.level_upgrade.pressed.connect(node.level_up)
-        self.enter.setEnabled(bool(node.left or node.right))
+    def level_up(self) -> None:
+        if self.node:
+            self.node.level_up()
 
-        self.space_verbose.setText(f"{node.gem} / {node.space}")
-        self.spaceBar.setRange(0, node.space)
-        self.spaceBar.setValue(node.gem)
-        self.space_upgrade.setDisabled(
-            not node.can_expend_with(self.space_upgrade_spin.value())
-        )
-        if self.old_linkb:
-            self.space_upgrade.pressed.disconnect(None)
-        self.old_linkb = self.space_upgrade.pressed.connect(
-            partial(node.expend, self.space_upgrade_spin.value())
-        )
+    def space_up(self) -> None:
+        if self.node:
+            self.node.expend(self.space_upgrade_spin.value())
 
-        self.level.setText(f"等级: {node.level}")
+    def update(self) -> None:
+        if self.node:
+            self.produce_time.setText(f"{self.node.ms_require/1000:.4f} s")
+            if self.node.ms_require <= 1000:
+                self.produceBar.setRange(0, 1)
+                self.produceBar.setValue(1)
+                self.produceBar.setFormat(f"{1000 / self.node.ms_require:.2f} /s")
+            else:
+                self.produceBar.setRange(0, self.node.ms_require)
+                self.produceBar.setValue(self.node.ms_pass)
+            self.level_upgrade.setDisabled(not self.node.can_level_up())
+
+            self.space_verbose.setText(f"{self.node.gem} / {self.node.space}")
+            self.spaceBar.setRange(0, self.node.space)
+            self.spaceBar.setValue(self.node.gem)
+            self.space_upgrade.setDisabled(
+                not self.node.can_expend_with(self.space_upgrade_spin.value())
+            )
+
+            self.level.setText(f"等级: {self.node.level}")
 
 
 class Application(QMainWindow):
@@ -327,8 +334,6 @@ class Application(QMainWindow):
         super().__init__()
         self.setWindowTitle("Test")
         self.statusBar().clearMessage()
-
-        self.data = Data()
 
         # set menu
         game_menu = QMenu("Game", self)
@@ -375,42 +380,35 @@ class Application(QMainWindow):
         self.ring_view = QWidget()
         self.ring_view_layout = QHBoxLayout(self.ring_view)
 
-        self.ring_view_left = CardView(self.ring_view)
-
-        self.ring_view_right = CardView(self.ring_view)
+        self.ring_view_left = CardView(self, data.current_visit.left)
+        self.ring_view_right = CardView(self, data.current_visit.right)
 
         self.space_tab_layout = QHBoxLayout(self.space_tab)
         self.space_tab_layout.addWidget(self.ring_view_left)
         self.space_tab_layout.addWidget(self.ring_view_right)
 
-    def update_space_tab(self, unlock: UnlockList) -> None:
-        node = self.data.tree.current_visit
-        if node.left:
-            self.ring_view_left.setVisible(True)
-            if unlock.can_enter:
-                self.ring_view_left.enter.setVisible(True)
-            if unlock.can_new:
-                self.ring_view_left.new_ring.setVisible(True)
-            self.ring_view_left.update(node.left)
-        else:
-            self.ring_view_left.setVisible(False)
-        if node.right:
-            self.ring_view_right.setVisible(True)
-            self.ring_view_right.update(node.right)
-        else:
-            self.ring_view_right.setVisible(False)
+    @Slot(RingNode)
+    def enter_new_node(self, node: RingNode):
+        data.enter_node(node)
+        self.ring_view_left.new_node(node.left)
+        self.ring_view_right.new_node(node.right)
+
+    def update_space_tab(self) -> None:
+        self.ring_view_left.update()
+        self.ring_view_right.update()
 
     def define_upgrade_tab(self) -> None:
         pass
 
     def global_timer_update(self) -> None:
-        self.data.update(20)
-        self.update_space_tab(self.data.unlock)
+        data.update(20)
+        self.update_space_tab()
 
     def save(self):
-        self.data.save()
+        data.save()
         self.statusBar().showMessage("Save 完成.", 5000)
 
+    # overload
     def closeEvent(self, event: QCloseEvent) -> None:
         try:
             self.save()
@@ -418,6 +416,8 @@ class Application(QMainWindow):
             pass
         return super().closeEvent(event)
 
+
+data = Data()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
