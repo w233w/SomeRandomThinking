@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import enum
 from functools import partial
+from itertools import product
 import sys
 from tokenize import Single
 from typing import Any, Literal, Optional
@@ -34,9 +35,11 @@ from PySide6.QtGui import QAction, QCloseEvent, QPaintEvent, QPixmap, QIcon
 
 import random
 
+from numpy import isin
+
 
 @dataclass
-class LandType:
+class Land:
     uid: int
     name: str
     src: str
@@ -54,33 +57,27 @@ class Building:
     cost: dict[str, int]
 
 
-@dataclass
-class LandPic:
-    land_type: LandType
-    building: Optional[Building]
-
-    @property
-    def has_building(self) -> bool:
-        return self.building is not None
-
-
-class Land(QObject):
+class LandController(QObject):
     updated = Signal()
     day_passed = Signal()
+    
+    BUILDINGS: dict[int, Building] = {
+        0: Building(0, "麦田", "c.png", "", 1, {}),
+        1: Building(1, "民宅", "h.png", "", 1, {"wood": 20}),
+    }
 
-    SRC: dict[int, LandType | Building] = {
-        0: LandType(0, "normal", "g.png", "", []),
-        1: LandType(1, "palace", "p.png", "", []),
-        2: LandType(2, "mountain", "m.png", "", []),
-        3: LandType(3, "normal-water", "w.png", "", []),
-        4: LandType(4, "salt-water", "nw.png", "", []),
-        5: LandType(5, "盆地", "nw.png", "", []),
-        6: Building(6, "麦田", "c.png", "", 1, {}),
-        7: Building(7, "民宅", "", "", 1, {"Food": 20}),
+    LANDS: dict[int, Land] = {
+        0: Land(0, "normal", "g.png", "", [BUILDINGS[0], BUILDINGS[1]]),
+        1: Land(1, "palace", "p.png", "", []),
+        2: Land(2, "mountain", "m.png", "", []),
+        3: Land(3, "normal-water", "w.png", "", []),
+        4: Land(4, "salt-water", "nw.png", "", []),
+        5: Land(5, "盆地", "", "", []),
     }
 
     def __init__(self, size: int) -> None:
         super().__init__()
+        assert size >= 4
         self.grain: int = 0
         self.meat: int = 0
         self.wood: int = 0
@@ -89,50 +86,65 @@ class Land(QObject):
         self.population: int = 0
 
         self.land_size = size
-        self.land: list[list[int]] = self.gen_lend(self.land_size)
+        self.lands: list[list[Land]] = self.gen_lend(self.land_size)
+        self.buildings : list[list[Optional[Building]]] = [[None for _ in range(size)] for _ in range(size)]
 
-        for a in self.land:
+        for a in self.lands:
             for b in a:
-                if b == 0:
+                if b.uid == 0:
                     pass
-                if b == 1:
+                if b.uid == 1:
                     self.population += 100
 
-    def gen_lend(self, size: int) -> list:
-        land = [[0 for _ in range(size)] for _ in range(size)]
+    def gen_lend(self, size: int) -> list[list[Land]]:
+        _land: list[list[int]] = [[0 for _ in range(size)] for _ in range(size)]
         palace_x = random.randint(1, self.land_size - 2)
         palace_y = random.randint(1, self.land_size - 2)
-        land[palace_x][palace_y] = 1
+        _land[palace_x][palace_y] = 1
+        land: list[list[Land]] = [[LandController.LANDS[_land[x][y]] for y in range(size)] for x in range(size)]
         return land
+    
+    def get_land_pic(self, coord) -> Land | Building:
+        building = self.buildings[coord[0]][coord[1]]
+        if building:
+            return building
+        else: 
+            return self.lands[coord[0]][coord[1]]
 
-    def do(self, coord):
-        menu_info: list[LandType | Building] = []
-        if self.land[coord[0]][coord[1]] == 0:
-            menu_info = [Land.SRC[6], Land.SRC[7]]
-        md = MyDialog(menu_info)
+    def do(self, coord: tuple[int, int]) -> None:
+        menu_info = self.lands[coord[0]][coord[1]].can_build
+        md = MyDialog(menu_info, self.get_able())
         md.selected.connect(partial(self.update, coord))
-        self.day_passed.connect(md.refresh)
+        self.day_passed.connect(partial(md.refresh, self.get_able()))
         md.exec()
+        
+    def get_able(self) -> list[bool]:
+        return [True, bool(random.randint(0, 1))]
 
-    def update(self, coord, a: int):
-        self.land[coord[0]][coord[1]] = a
+    def update(self, coord, a: Building) -> None:
+        self.buildings[coord[0]][coord[1]] = a
         self.updated.emit()
 
-    def day_pass(self):
-        for i, row in enumerate(self.land):
-            for j, land in enumerate(row):
-                if land == 6:
-                    self.grain += 10
+    def day_pass(self) -> None:
+        for (i, j) in product(range(self.land_size), range(self.land_size)):
+            pic = self.get_land_pic((i, j))
+            if isinstance(pic, Building):
+                match pic.uid:
+                    case 0:
+                        self.grain += 10
+                    case 1:
+                        self.grain -= 1
+                    case _:
+                        pass
         self.day_passed.emit()
 
 
 class MyDialog(QDialog):
-    selected = Signal(int)
+    selected = Signal(Building)
 
-    def __init__(self, info: list[LandType | Building]) -> None:
+    def __init__(self, info: list[Building], able: list[bool]) -> None:
         super().__init__()
         self.setWindowTitle("Detail")
-        self.info = info
 
         self.bbox = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel, self)
         self.bbox.rejected.connect(self.reject)
@@ -140,12 +152,13 @@ class MyDialog(QDialog):
         self.main_widget = QWidget(self)
         self.main_layout = QGridLayout(self.main_widget)
 
-        for i, land in enumerate(self.info):
+        for i, (building, a) in enumerate(zip(info, able)):
             image = QLabel()
-            image.setPixmap(QPixmap(land.src))
-            label = QLabel(land.name)
+            image.setPixmap(QPixmap(building.src))
+            label = QLabel(building.name)
             btn = QPushButton("buy")
-            btn.clicked.connect(partial(self.do, land.uid))
+            btn.clicked.connect(partial(self.do, building))
+            btn.setDisabled(not a)
             self.main_layout.addWidget(image, i, 0)
             self.main_layout.addWidget(label, i, 1)
             self.main_layout.addWidget(btn, i, 2)
@@ -157,12 +170,14 @@ class MyDialog(QDialog):
         self.d_layout.addWidget(self.bbox)
         self.setLayout(self.d_layout)
 
-    def refresh(self):
-        for i, land in enumerate(self.info):
-            print(1)
+    def refresh(self, able: list[bool]) -> None:
+        for i, b in enumerate(able):
+            btn = self.main_layout.itemAtPosition(i, 2).widget()
+            assert isinstance(btn, QPushButton)
+            btn.setDisabled(not b)
 
     @Slot(int)
-    def do(self, res):
+    def do(self, res: Building):
         self.selected.emit(res)
         self.accept()
 
@@ -197,7 +212,7 @@ class Application(QMainWindow):
 
         self.setWindowIcon(QIcon("c.png"))
 
-        self.land = Land(4)
+        self.land = LandController(4)
         self.land.updated.connect(self.update_map_tab)
 
         # set menu
@@ -270,25 +285,27 @@ class Application(QMainWindow):
     def define_map_tab(self):
         self.map_tab_layout = QGridLayout(self.map_tab)
         self.tests: list[list[QToolButton]] = []
-        for i, row in enumerate(self.land.land):
+        for r in range(self.land.land_size):
             temp = []
-            for j, land in enumerate(row):
+            for c in range(self.land.land_size):
+                land_pic: Land | Building = self.land.get_land_pic((r, c))
                 btn = QToolButton()
-                icon = QIcon(Land.SRC[land].src)
+                icon = QIcon(land_pic.src)
                 btn.setIcon(icon)
                 btn.setIconSize(btn.sizeHint())
                 btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-                btn.clicked.connect(partial(self.land.do, (i, j)))
-                self.map_tab_layout.addWidget(btn, i, j)
+                btn.clicked.connect(partial(self.land.do, (r, c)))
+                self.map_tab_layout.addWidget(btn, r, c)
                 temp.append(btn)
             self.tests.append(temp)
 
     def update_map_tab(self):
-        for i, row in enumerate(self.land.land):
-            for j, land in enumerate(row):
-                btn = self.map_tab_layout.itemAtPosition(i, j).widget()
+        for r in range(self.land.land_size):
+            for c in range(self.land.land_size):
+                btn = self.map_tab_layout.itemAtPosition(r, c).widget()
                 assert isinstance(btn, QToolButton)
-                icon = QIcon(Land.SRC[land].src)
+                land_pic: Land | Building = self.land.get_land_pic((r, c))
+                icon = QIcon(land_pic.src)
                 btn.setIcon(icon)
 
     def define_policy_tab(self):
@@ -298,12 +315,12 @@ class Application(QMainWindow):
         self.statusBar().showMessage("123", 3000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        print(self.land.grain)
         return super().closeEvent(event)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyle("WindowsVista")
     window = Application()
     window.show()
     app.exec()
