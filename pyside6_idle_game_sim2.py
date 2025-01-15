@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from distutils.command import build
 from functools import partial
 from itertools import product
 from math import ceil
@@ -75,7 +76,8 @@ class Building:
     level: int
     land_richness_usage: RichnessUsage
     cost: dict[str, int]
-    population: list[int]
+    population: int
+    max_population: int
 
 
 class LandController(QObject):
@@ -84,12 +86,30 @@ class LandController(QObject):
 
     # TODO ecs临时解决方法
     BUILDINGS: dict[int, Building] = {
-        0: Building(0, "宫殿", "p.png", "", 1, RichnessUsage(0, 0, 0, 0, 0, 0), {}, []),
+        0: Building(
+            0, "宫殿", "p.png", "", 1, RichnessUsage(0, 0, 0, 0, 0, 0), {}, 20, 100
+        ),
         1: Building(
-            1, "民宅", "h.png", "", 1, RichnessUsage(0, 0, 0, 0, 0, 0), {"wood": 20}, []
+            1,
+            "民宅",
+            "h.png",
+            "",
+            1,
+            RichnessUsage(0, 0, 0, 0, 0, 0),
+            {"food": 20},
+            0,
+            50,
         ),
         2: Building(
-            2, "麦田", "c.png", "", 1, RichnessUsage(1, 0, 0, 0, 0.1, 0), {}, []
+            2,
+            "麦田",
+            "c.png",
+            "",
+            1,
+            RichnessUsage(1, 0, 0, 0, 0.1, 0),
+            {"food": 50},
+            0,
+            0,
         ),
     }
 
@@ -104,21 +124,20 @@ class LandController(QObject):
         7: Land(7, "森林", "", "", Richness(0, 10, 0, 0, 0, 0), []),
     }
 
-    def __init__(self, size: int, parent: Application) -> None:
-        super().__init__(parent)
+    def __init__(self, size: int) -> None:
+        super().__init__()
         assert size >= 4
-        self.food: int = 0
+        self.food: int = 50
         self.wood: int = 0
         self.stone: int = 0
         self.metal: int = 0
-        self.population: int = 0
+        self.satisfaction: float = 0.0
 
         self.land_size = size
         self.lands: list[list[Land]] = self.gen_lend(self.land_size)
         self.buildings: list[list[Optional[Building]]] = self.gen_building(
             self.land_size
         )
-        self.p = parent
 
     def gen_lend(self, size: int) -> list[list[Land]]:
         _land: list[list[int]] = [[0 for _ in range(size)] for _ in range(size)]
@@ -141,26 +160,26 @@ class LandController(QObject):
         buildings[palace_x][palace_y] = LandController.BUILDINGS[0]
         return buildings
 
-    def get_land_pic(self, coord) -> Land | Building:
-        building = self.buildings[coord[0]][coord[1]]
+    def get_land_pic(self, coord) -> tuple[Land] | tuple[Land, Building]:
+        building: Building = self.buildings[coord[0]][coord[1]]
         if building:
-            return building
+            return self.lands[coord[0]][coord[1]], building
         else:
-            return self.lands[coord[0]][coord[1]]
+            return (self.lands[coord[0]][coord[1]],)
 
     def do(self, coord: tuple[int, int]) -> None:
         land_type = self.get_land_pic(coord)
-        if isinstance(land_type, Land):
-            land_info = land_type
+        land_top = land_type[-1]
+        if isinstance(land_top, Land):
             building_info = [
-                LandController.BUILDINGS[uid] for uid in land_type.can_build
+                LandController.BUILDINGS[uid] for uid in land_top.can_build
             ]
-            md = MyDialog_Land(land_info, building_info, self.get_able(building_info))
+            md = MyDialog_Land(land_top, building_info, self.get_able(building_info))
             md.selected.connect(partial(self.update, coord))
             self.day_passed.connect(partial(md.refresh, self.get_able(building_info)))
             md.exec()
-        elif isinstance(land_type, Building):
-            md = MyDialog_Building(land_type)
+        elif isinstance(land_top, Building):
+            md = MyDialog_Building(land_top)
             md.exec()
 
     def get_able(self, building_info: list[Building]) -> list[bool]:
@@ -168,26 +187,49 @@ class LandController(QObject):
         for building in building_info:
             cost = building.cost
             for resource, volumn in cost.items():
-                if getattr(self, resource) <= volumn:
+                if getattr(self, resource) < volumn:
                     temp.append(False)
                     break
             else:
                 temp.append(True)
         return temp
 
-    def update(self, coord, a: Building) -> None:
-        self.buildings[coord[0]][coord[1]] = a
+    def update(self, coord, b: Building) -> None:
+        self.buildings[coord[0]][coord[1]] = b
+        cost = b.cost
+        for resource, volumn in cost.items():
+            setattr(self, resource, getattr(self, resource) - volumn)
         self.updated.emit()
 
-    def day_pass(self) -> None:
+    @property
+    def population(self) -> tuple[int, int]:
+        pop, max_pop = 0, 0
         for i, j in product(range(self.land_size), range(self.land_size)):
             pic = self.get_land_pic((i, j))
             if isinstance(pic, Building):
-                match pic.uid:
+                pop += pic.population
+                max_pop += pic.max_population
+        return pop, max_pop
+
+    def day_pass(self) -> None:
+        for i, j in product(range(self.land_size), range(self.land_size)):
+            land_pic = self.get_land_pic((i, j))
+            if len(land_pic) == 2:
+                land, building = land_pic
+                # TODO ECS临时方案，之后换成building的callback
+                match building.uid:
                     case 2:
-                        self.food += 10
+                        self.food += int(
+                            building.land_richness_usage.土地 * land.richness.土地
+                        )
                     case 1:
-                        self.food -= 1
+                        if (
+                            self.food >= 10
+                            and building.population < building.max_population
+                        ):
+                            self.food -= 10
+                            building.population += 1
+                            print(123)
                     case _:
                         pass
         self.day_passed.emit()
@@ -242,10 +284,10 @@ class MyDialog_Land(QDialog):
             image.setPixmap(QPixmap(building.src))
             label = QLabel(building.name, self.main_widget)
             label.setToolTip(repr(building.land_richness_usage))
-            btn = QPushButton("buy", self.main_widget)
+            btn = QPushButton("build", self.main_widget)
             btn.clicked.connect(partial(self.do, building))
             btn.setDisabled(not a)
-            btn.setToolTip(repr(building.land_richness_usage))
+            btn.setToolTip(repr(building.cost))
             self.main_layout.addWidget(image, i, 0)
             self.main_layout.addWidget(label, i, 1)
             self.main_layout.addWidget(btn, i, 2)
@@ -330,7 +372,7 @@ class Application(QMainWindow):
 
         self.setWindowIcon(QIcon("c.png"))
 
-        self.land = LandController(4, self)
+        self.land = LandController(5)
         self.land.updated.connect(self.update_map_tab)
 
         # set menu
@@ -417,9 +459,10 @@ class Application(QMainWindow):
         for r in range(self.land.land_size):
             temp = []
             for c in range(self.land.land_size):
-                land_pic: Land | Building = self.land.get_land_pic((r, c))
+                land_pic = self.land.get_land_pic((r, c))
+                land_top = land_pic[-1]
                 btn = QToolButton()
-                icon = QIcon(land_pic.src)
+                icon = QIcon(land_top.src)
                 btn.setIcon(icon)
                 btn.setIconSize(btn.sizeHint())
                 btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
@@ -433,8 +476,9 @@ class Application(QMainWindow):
             for c in range(self.land.land_size):
                 btn = self.map_tab_layout.itemAtPosition(r, c).widget()
                 assert isinstance(btn, QToolButton)
-                land_pic: Land | Building = self.land.get_land_pic((r, c))
-                icon = QIcon(land_pic.src)
+                land_pic = self.land.get_land_pic((r, c))
+                land_top = land_pic[-1]
+                icon = QIcon(land_top.src)
                 btn.setIcon(icon)
 
     def define_policy_tab(self):
