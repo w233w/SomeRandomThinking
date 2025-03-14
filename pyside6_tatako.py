@@ -38,8 +38,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QEvent, QMetaObject, QSize, QTimer, Qt, Slot, Signal, QObject
 from PySide6.QtGui import QAction, QCloseEvent, QPaintEvent, QPixmap, QIcon
 
-# text based escape from tarkov
-
+# text based tarkov
+# tatako = tarkov + tatakai :)
 
 class DayTime:
     def __init__(self) -> None:
@@ -114,6 +114,7 @@ class LocationController(QObject):
 
 class InventoryController(QObject):
     time_pass = Signal(int)
+    drop_to_ground = Signal(type["Item"])
 
     def __init__(self) -> None:
         """包含数个容器"""
@@ -128,6 +129,8 @@ class InventoryController(QObject):
             container.item_used_time.connect(self.time_pass.emit)
 
         self.equipment = EquipmentController(self)
+        self.equipment.sig_drop_item.connect(self.handle_drop_equip)
+        self.equipment.sig_equip.connect(self.handle_equip)
 
     def get_container(self, index: int):
         assert 0 <= index < len(self.containers)
@@ -147,6 +150,22 @@ class InventoryController(QObject):
             res.extend(e_list)
         return res
 
+    def handle_drop_equip(self, item: Item):
+        v = item.volumn
+        for c in self.containers:
+            if c.volumn + v <= c.max_volumn:
+                c.add_item(item)
+                c.need_refresh_UI.emit()
+                return
+        self.drop_to_ground.emit(item)
+
+    def handle_equip(self, item: Item):
+        for c in self.containers:
+            if c.has_item(item):
+                c.remove_item(item)
+                c.need_refresh_UI.emit()
+                break
+
 
 class ContainerController(QObject):
     """
@@ -160,6 +179,7 @@ class ContainerController(QObject):
     item_overflow = Signal(type("Item"))
     item_use = Signal(type(callable))
     item_drop = Signal(type("Item"))
+    need_refresh_UI = Signal()
 
     def __init__(
         self,
@@ -188,13 +208,11 @@ class ContainerController(QObject):
             res += item.volumn
         return res
 
-    def add_item(self, item_type: type[Item], quantity: int):
-        for _ in range(quantity):
-            item = item_type()
-            if item.volumn + self.volumn <= self.max_volumn:
-                self.items.append(item)
-            else:
-                self.item_overflow.emit(item)
+    def add_item(self, item: Item):
+        if item.volumn + self.volumn <= self.max_volumn:
+            self.items.append(item)
+        else:
+            self.item_overflow.emit(item)
 
     def use_item(self, item: Item):
         assert item in self.items
@@ -206,6 +224,13 @@ class ContainerController(QObject):
         assert item in self.items
         self.items.remove(item)
         self.item_drop.emit(item)
+
+    def has_item(self, item: Item):
+        return item in self.items
+
+    def remove_item(self, item: Item):
+        print("container removed a item")
+        self.items.remove(item)
 
     def query(self, eq_type: str):
         res = []
@@ -277,6 +302,18 @@ class BattleController(QObject):
 
 
 class EquipmentController(QObject):
+    parts_table = {
+        "头部": "head",
+        "内搭": "inner_cloth",
+        "外搭": "cloth",
+        "主手": "main_hand",
+        "副手": "off_hand",
+        "下装": "pents",
+        "鞋子": "shoes",
+    }
+    sig_equip = Signal(Item)  # 装上的装备，需要从原容器中移除
+    sig_drop_item = Signal(Item)  # 换下的装备，需要移动到空容器中，或者地上。
+
     def __init__(self, parent) -> None:
         super().__init__(parent)
         self.max_volumn = 100
@@ -289,21 +326,21 @@ class EquipmentController(QObject):
         self.pents: Optional[Item] = None
         self.shoes: Optional[Item] = None
 
-    def equip(self, item: Item):
-        pass
+    def equip(self, item: Item, t: str):
+        old_part: Optional[Item] = getattr(self, EquipmentController.parts_table[t])
+        if old_part:
+            self.sig_drop_item.emit(old_part)
+        setattr(self, EquipmentController.parts_table[t], item)
+        self.sig_equip.emit(item)
+
+    def unequip(self, t: str):
+        part: Optional[Item] = getattr(self, EquipmentController.parts_table[t])
+        if part:
+            self.sig_drop_item.emit(part)
+            setattr(self, EquipmentController.parts_table[t], None)
 
 
 class EquipmentUI(QWidget):
-    parts_table = {
-        "头部": "head",
-        "内搭": "inner_cloth",
-        "外搭": "cloth",
-        "主手": "main_hand",
-        "副手": "off_hand",
-        "下装": "pents",
-        "鞋子": "shoes",
-    }
-
     def __init__(
         self, equipment: EquipmentController, parent: QWidget | None = None
     ) -> None:
@@ -335,7 +372,7 @@ class EquipmentUI(QWidget):
         self.updateUI()
 
     def updateUI(self):
-        for name, code in EquipmentUI.parts_table.items():
+        for name, code in self.controller.parts_table.items():
             btn: QPushButton = getattr(self, code)
             item: Optional[Item] = getattr(self.controller, code)
             if item is not None:
@@ -349,16 +386,16 @@ class EquipmentUI(QWidget):
         inventory = self.controller.parent()
         assert isinstance(inventory, InventoryController)
         e_list = inventory.equipment_query(query_equipment_type)
-        print(e_list)
         dig = EquipmentDialog(query_equipment_type, None, e_list)
         dig.acctpe_item.connect(self.re_item)
         dig.exec()
 
-    def re_item(self, item: Optional[Item]):
+    def re_item(self, item: Optional[Item], t: str):
         if item:  # 换装
-            pass
+            self.controller.equip(item, t)
         else:  # 卸装
-            pass
+            self.controller.unequip(t)
+        self.updateUI()
 
 
 class MyQListWidgetItem(QListWidgetItem):
@@ -368,7 +405,7 @@ class MyQListWidgetItem(QListWidgetItem):
 
 
 class EquipmentDialog(QDialog):
-    acctpe_item = Signal(type["Any"])
+    acctpe_item = Signal(Item, str)
 
     def __init__(
         self,
@@ -380,8 +417,7 @@ class EquipmentDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.bbox = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Cancel
-            | QDialogButtonBox.StandardButton.Apply,
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok,
             self,
         )
         self.bbox.rejected.connect(self.reject)
@@ -408,8 +444,6 @@ class EquipmentDialog(QDialog):
         self.available_equipments.setCurrentItem(unequip)
         self.available_equipments.itemClicked.connect(self.set_preview)
 
-        self.bbox.rejected.connect(self.reject)
-
         self.d_layout = QGridLayout(self)
         self.d_layout.addWidget(self.equiped_widget, 0, 0)
         self.d_layout.addWidget(self.preview_widget, 0, 1)
@@ -425,7 +459,7 @@ class EquipmentDialog(QDialog):
             self.preview_widget.setTitle("无")
 
     def accept(self) -> None:
-        self.acctpe_item.emit(self.selected)
+        self.acctpe_item.emit(self.selected, self.windowTitle())
         return super().accept()
 
 
@@ -441,6 +475,7 @@ class ContainerUI(QGroupBox):
         super().__init__(parent)
 
         self.container = container
+        self.container.need_refresh_UI.connect(self.update)
         layout = QVBoxLayout(self)
 
         self.on_selected: Optional[Item] = None
